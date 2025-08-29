@@ -9,6 +9,7 @@ const errorHandler = require('./src/middlewares/errorHandler') // Global error h
 
 // Import route modules
 const authRouter = require('./src/routers/authRouter')
+const employeeRouter = require('./src/routers/employeeRouter')
 
 // Initialize the Express app
 const app = express()
@@ -26,6 +27,7 @@ app.get('/health-check', (req, res) => {
 })
 
 app.use('/api/auth', authRouter)
+app.use('/api/employee', employeeRouter)
 
 // Global error-handling middleware
 app.use(errorHandler)
