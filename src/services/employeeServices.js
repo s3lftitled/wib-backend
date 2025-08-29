@@ -3,6 +3,7 @@ const EmployeeModel = require('../models/employee.model')
 const HTTP_STATUS = require('../constants/httpConstants')
 const { appAssert } = require('../utils/appAssert')
 const PasswordUtil = require('../utils/passwordUtils')
+const logger = require('../logger/logger')
 
 const employeeTimeIn = async (email, password) => {
     try {
@@ -23,10 +24,13 @@ const employeeTimeIn = async (email, password) => {
             }
         }
 
-        // Clock in the employee
-        employee.attendance.push({ timeIn: new Date() })
-        await employee.save();
+        const employeeTimeIn = new Date()
 
+        // Clock in the employee
+        employee.attendance.push({ timeIn: employeeTimeIn})
+        await employee.save()
+
+        logger.info(`${user.name} timed in:  ${employeeTimeIn}`)
         return { employee, message: 'Timed-in succesfully' }
     } catch (error) {
         throw error
