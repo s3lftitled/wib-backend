@@ -1,15 +1,29 @@
+// Import required packages and modules
 const express = require('express')
 require('dotenv').config()
-const connectWithRetry = require('./src/config/connectDB')
-const logger = require('./src/logger/logger')
 
+// Import custom modules
+const connectWithRetry = require('./src/config/connectDB')  // Function to connect to MongoDB
+const logger = require('./src/logger/logger')         // Custom logger for logging info and errors
+const errorHandler = require('./src/middlewares/errorHandler') // Global error handler middleware
+
+// Initialize the Express app
 const app = express()
+
+// Set server port from environment variable or use default 5001
 const port = process.env.PORT || 5000
+
+// Middleware to parse incoming JSON and URL-encoded data with high size limits
+app.use(express.json({ limit: '100mb' }))
+app.use(express.urlencoded({ extended: true, limit: '100mb', parameterLimit: 1000000 }))
 
 // Endpoint for checking the health of the server
 app.get('/health-check', (req, res) => {
   res.send('server is healthy!!')
 })
+
+// Global error-handling middleware
+app.use(errorHandler)
 
 // Function to start the server
 const start = async () => {
