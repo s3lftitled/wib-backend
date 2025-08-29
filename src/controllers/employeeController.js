@@ -3,11 +3,12 @@ const HTTP_STATUS = require('../constants/httpConstants') // Centralized HTTP st
 const logger = require('../logger/logger') // Logger utility for error/info logging
 const { 
   employeeTimeIn, // Service function that handles employee time-in logic
+  employeeTimeOut, // Service function that handles employee time-out logic
 } = require('../services/employeeServices')
 
 class EmployeeController {
   // Controller method to handle employee time-in requests
-  async employeeTimeIn(req, res) {
+  async employeeTimeIn(req, res, next) {
     // Extract employee credentials from the request body
     const { email, password } = req.body
 
@@ -23,9 +24,18 @@ class EmployeeController {
       logger.error(error)
 
       // Send an error response with the appropriate status code
-      return res
-        .status(error.status || HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: error.message })
+      next(error)
+    }
+  }
+  async employeeTimeOut(req, res, next) {
+    const { email, password } = req.body
+
+    try {
+      const { employee, message } = await employeeTimeOut(email, password)
+      return res.status(HTTP_STATUS.OK).json({ employee, message })
+    } catch (error) {
+      logger.error(error)
+      next(error)
     }
   }
 }
