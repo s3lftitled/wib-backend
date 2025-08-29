@@ -5,6 +5,7 @@ const EmployeeController = require('../controllers/employeeController') // Impor
 // Define the time-in route
 // POST request to /v1/time-in will trigger the employeeTimeIn method
 router.post('/v1/time-in', EmployeeController.employeeTimeIn)
+router.post('/v1/time-out', EmployeeController.employeeTimeOut)
 
 // Export the router to use in the main app
 module.exports = router
