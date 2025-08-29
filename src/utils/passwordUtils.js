@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt')
 const logger = require('../logger/logger')
+const crypto = require('crypto')
 
 class PasswordUtil {
   async hashPassword(password) {
@@ -16,6 +17,19 @@ class PasswordUtil {
       throw new Error('Missing arguments: plainPassword and hashedPassword are required')
     }
     return await bcrypt.compare(plainPassword, hashedPassword)
+  }
+
+  async createTempPassword() {
+    try {
+      const tempPassword = crypto.randomBytes(10).toString('hex')
+      const hashedPassword = await bcrypt.hash(tempPassword, 10) 
+
+      return hashedPassword
+    } catch (error) {
+      logger.error('Error creating temporary password:', error)
+      throw new Error('Failed to create temporary password.')
+    }
+
   }
 }
 
