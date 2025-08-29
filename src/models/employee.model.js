@@ -1,4 +1,5 @@
 const mongoose = require("mongoose")
+const ROLE_CONSTANTS = require("../constants/roleConstants")
 
 const EmployeeSchema = new mongoose.Schema({
   userId: { 
@@ -10,7 +11,7 @@ const EmployeeSchema = new mongoose.Schema({
   // Fixed role
   role: { 
     type: String, 
-    default: "employee", 
+    default: ROLE_CONSTANTS[101], 
     immutable: true 
   },
 
