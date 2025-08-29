@@ -1,17 +1,25 @@
-const HTTP_STATUS = require('../constants/httpConstants')
-const logger = require('../logger/logger')
+  // Import constants and logger
+  const HTTP_STATUS = require('../constants/httpConstants') // Centralized HTTP status codes (e.g., 500 for server error)
+  const logger = require('../logger/logger') // Logger utility for logging errors
 
-const errorHandler = (err, req, res, next) => { 
-  const statusCode = err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR
-  const message = err.message || 'Something went wrong!'
+  // Express error-handling middleware
+  const errorHandler = (err, req, res, next) => { 
+    // Determine the HTTP status code (fallback to 500 if not provided)
+    const statusCode = err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR
 
-  logger.logError(err, req)
+    // Use the error's message or a generic fallback
+    const message = err.message || 'Something went wrong!'
 
-  res.status(statusCode).json({ 
-    success: false, 
-    message, 
-    errors: err.errors || null 
-  })
-}
+    // Log the error details (custom logger that may include request info)
+    logger.logError(err, req)
 
-module.exports = errorHandler
+    // Send a structured error response
+    res.status(statusCode).json({ 
+      success: false,          // Indicates failure
+      message,                 // Error message
+      errors: err.errors || null // Additional validation/field errors if available
+    })
+  }
+
+  // Export the middleware to be used in app.js / server.js
+  module.exports = errorHandler
