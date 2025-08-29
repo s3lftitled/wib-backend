@@ -1,21 +1,25 @@
-const UserModel = require('../models/user.model')
-const EmployeeModel = require('../models/employee.model')
-const HTTP_STATUS = require('../constants/httpConstants')
-const { appAssert } = require('../utils/appAssert')
-const PasswordUtil = require('../utils/passwordUtils')
+const UserModel = require('../models/user.model')         // User model for authentication
+const EmployeeModel = require('../models/employee.model') // Employee model for attendance tracking
+const HTTP_STATUS = require('../constants/httpConstants') // HTTP status codes (200, 401, 404, 409, etc.)
+const { appAssert } = require('../utils/appAssert')       // Utility for throwing structured errors
+const PasswordUtil = require('../utils/passwordUtils')   // Password hashing and comparison utility
 
+// Service function to handle employee "time-in"
 const employeeTimeIn = async (email, password) => {
     try {
+        // Step 1: Find the user by email
         const user = await UserModel.findOne({ email })
         appAssert(user, HTTP_STATUS.UNAUTHORIZED, "Invalid email or password")
 
+        // Step 2: Check if the password matches
         const isMatch = await PasswordUtil.comparePassword(password, user.password)
         appAssert(isMatch, HTTP_STATUS.UNAUTHORIZED, "Invalid email or password")
 
+        // Step 3: Find the corresponding employee record
         const employee = await EmployeeModel.findOne({ userId: user._id })
         appAssert(employee, HTTP_STATUS.NOT_FOUND, "Employee not found")
 
-        // Check if the employee is already clocked in
+        // Step 4: Check if employee is already clocked in
         if (employee.attendance.length > 0) {
             const lastAttendance = employee.attendance[employee.attendance.length - 1]
             if (!lastAttendance.timeOut) {
@@ -23,16 +27,19 @@ const employeeTimeIn = async (email, password) => {
             }
         }
 
-        // Clock in the employee
+        // Step 5: Record the current time as time-in
         employee.attendance.push({ timeIn: new Date() })
-        await employee.save();
+        await employee.save(); // Save the updated employee record
 
+        // Step 6: Return the employee object and success message
         return { employee, message: 'Timed-in succesfully' }
     } catch (error) {
+        // Propagate the error to be handled by the controller/middleware
         throw error
     }
 }
 
+// Export the service function
 module.exports = {
     employeeTimeIn,
 }
