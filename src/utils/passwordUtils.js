@@ -1,5 +1,7 @@
-const bcrypt = require('bcrypt')         // Bcrypt library for hashing and comparing passwords
-const logger = require('../logger/logger') // Custom logger for error tracking
+const bcrypt = require('bcrypt')
+const logger = require('../logger/logger')
+const crypto = require('crypto')
+
 
 class PasswordUtil {
   // Method to hash a plain text password
@@ -22,6 +24,19 @@ class PasswordUtil {
     }
     // Return true if passwords match, false otherwise
     return await bcrypt.compare(plainPassword, hashedPassword)
+  }
+
+  async createTempPassword() {
+    try {
+      const tempPassword = crypto.randomBytes(10).toString('hex')
+      const hashedPassword = await bcrypt.hash(tempPassword, 10) 
+
+      return hashedPassword
+    } catch (error) {
+      logger.error('Error creating temporary password:', error)
+      throw new Error('Failed to create temporary password.')
+    }
+
   }
 }
 

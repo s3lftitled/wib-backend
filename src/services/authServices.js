@@ -18,6 +18,9 @@ const logInService = async (email, password) => {
     // If password is invalid, throw an error
     appAssert(isPasswordValid, "Password is incorrect, please try again", HTTP_STATUS.BAD_REQUEST)
 
+    // Log successful logins for auditing
+    logger.info(`${user.name} logged in`)
+    
     // Return the user object and success message if login is successful
     return { user, message: 'Logged in succesfully' }
   } catch (error) {
