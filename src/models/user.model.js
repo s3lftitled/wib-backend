@@ -1,6 +1,10 @@
 const mongoose = require("mongoose");
+const ROLE_CONSTANTS = require("../constants/roleConstants");
 
 const userSchema = new mongoose.Schema({
+  name: {
+     type: String, 
+  },
   email: { 
     type: String, 
     required: true, 
@@ -14,7 +18,7 @@ const userSchema = new mongoose.Schema({
   },
   role: { 
     type: String, 
-    enum: ["employee", "admin"], 
+    enum: [ROLE_CONSTANTS[101], ROLE_CONSTANTS[202]], 
     required: true 
   },
   createdAt: { 
