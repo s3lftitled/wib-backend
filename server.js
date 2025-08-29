@@ -7,6 +7,9 @@ const connectWithRetry = require('./src/config/connectDB')  // Function to conne
 const logger = require('./src/logger/logger')         // Custom logger for logging info and errors
 const errorHandler = require('./src/middlewares/errorHandler') // Global error handler middleware
 
+// Import route modules
+const authRouter = require('./src/routers/authRouter')
+
 // Initialize the Express app
 const app = express()
 
@@ -21,6 +24,8 @@ app.use(express.urlencoded({ extended: true, limit: '100mb', parameterLimit: 100
 app.get('/health-check', (req, res) => {
   res.send('server is healthy!!')
 })
+
+app.use('/api/auth', authRouter)
 
 // Global error-handling middleware
 app.use(errorHandler)
