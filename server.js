@@ -10,6 +10,7 @@ const errorHandler = require('./src/middlewares/errorHandler') // Global error h
 // Import route modules
 const authRouter = require('./src/routers/authRouter')
 const employeeRouter = require('./src/routers/employeeRouter')
+const adminRouter = require('./src/routers/adminRouter')
 
 // Initialize the Express app
 const app = express()
@@ -26,8 +27,14 @@ app.get('/health-check', (req, res) => {
   res.send('server is healthy!!')
 })
 
+// Authentication base routes
 app.use('/api/auth', authRouter)
+
+// Employee base routes
 app.use('/api/employee', employeeRouter)
+
+// Admin base routes
+app.use('/api/admin', adminRouter)
 
 // Global error-handling middleware
 app.use(errorHandler)
