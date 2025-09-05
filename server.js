@@ -1,6 +1,7 @@
 // Import required packages and modules
 const express = require('express')
 require('dotenv').config()
+const cors = require("cors")
 
 // Import custom modules
 const connectWithRetry = require('./src/config/connectDB')  // Function to connect to MongoDB
@@ -14,6 +15,8 @@ const adminRouter = require('./src/routers/adminRouter')
 
 // Initialize the Express app
 const app = express()
+
+app.use(cors())
 
 // Set server port from environment variable or use default 5001
 const port = process.env.PORT || 5000
