@@ -9,14 +9,11 @@ class AuthController {
   
   // Controller method to handle login requests
   async logInController(req, res, next) {
-    // Extract email and password from the request body
-    const { email, password } = req.body
+    const {  email, password } = req.body
     try {
-      // Call the login service with the provided credentials
-      // Service returns user details and a message if successful
+
       const { user, message } = await logInService(email, password)
       
-      // Send a success response with HTTP 200 status
       return res.status(HTTP_STATUS.OK).json({ user, message })
     } catch (error) {
       // Log the error for debugging/monitoring

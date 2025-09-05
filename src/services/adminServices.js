@@ -1,4 +1,5 @@
 const UserModel = require('../models/user.model')
+const EmployeeModel = require('../models/employee.model')
 const HTTP_STATUS = require('../constants/httpConstants')
 const ROLE_CONSTANTS = require('../constants/roleConstants')
 const { appAssert } = require('../utils/appAssert')
@@ -9,7 +10,7 @@ const logger = require('../logger/logger')
 
 const createEmployeeAccountService = async (name, email) => {
   try {
-    console.log(email)
+   
     appAssert(typeof name === "string", 'Invalid name, please try again', HTTP_STATUS.BAD_REQUEST)
     appAssert(validator.isEmail(email), 'Invalid email, please try again', HTTP_STATUS.BAD_REQUEST)
 
@@ -18,11 +19,17 @@ const createEmployeeAccountService = async (name, email) => {
 
     const hashedPassword = await PasswordUtil.createTempPassword()
 
-    const newEmployee = await UserModel.create({
+    const newUser = await UserModel.create({
       email,
       name,
       password: hashedPassword,
       role: ROLE_CONSTANTS[101]
+    })
+
+    await newUser.save()
+
+    const newEmployee = await EmployeeModel.create({
+      userId: newUser._id,
     })
 
     await newEmployee.save()
@@ -37,6 +44,30 @@ const createEmployeeAccountService = async (name, email) => {
   }
 }
 
+const fetchAllActiveEmployeeService = async () => {
+  try {
+    const allEmployees = await EmployeeModel.find()
+    .populate( "userId", "name email displayImage isActive")
+    
+    const employees = allEmployees.map(emp => ({
+        name: emp.userId.name,
+        email: emp.userId.email,
+        displayImage: emp.userId.displayImage,
+        isActive: emp.userId.isActive,
+      }))
+
+    appAssert(employees.length > 0, 'No active employees found', HTTP_STATUS.NOT_FOUND)
+
+    return { employees, message: 'Succesfully fetched all employees'}
+  } catch (error) {
+    throw error
+  }
+}
+
+// Fetch request leaves service
+
 module.exports = {
   createEmployeeAccountService,
+  fetchAllActiveEmployeeService,
+
 }

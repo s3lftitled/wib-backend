@@ -32,8 +32,12 @@ const EmployeeSchema = new mongoose.Schema({
   attendance: [
     {
       date: { type: Date, default: Date.now }, // calendar day
-      timeIn: { type: Date },   // full Date (day + time)
-      timeOut: { type: Date }   // full Date (day + time)
+      timeIn: { type: Date },   // full Date (day + time)  
+      timeOut: { type: Date },  // full Date (day + time)
+      breakTime: { type: Number, default: 0 }, // total break time in hours
+      totalHours: { type: Number, default: 0 }, // final calculated work hours
+      onBreak: { type: Boolean, default: false }, // currently on break status
+      breakStart: { type: Date } // when current break started
     }
   ]
 })

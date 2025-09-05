@@ -1,8 +1,7 @@
 const mongoose = require("mongoose");
 const ROLE_CONSTANTS = require("../constants/roleConstants");
 
-// Define the User schema
-const userSchema = new mongoose.Schema({
+const UserSchema = new mongoose.Schema({
   name: {
      type: String, 
   },
@@ -16,6 +15,9 @@ const userSchema = new mongoose.Schema({
   password: { 
     type: String,          // Data type is String
     required: true         // This field is mandatory
+  },
+  displayPicture: {
+    type: String
   },
   role: { 
     type: String, // Data type is String
@@ -33,5 +35,4 @@ const userSchema = new mongoose.Schema({
   }
 });
 
-// Export the model to use in other parts of the app
-module.exports = mongoose.model("User", userSchema)
+module.exports = mongoose.model("User", UserSchema)
