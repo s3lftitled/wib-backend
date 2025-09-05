@@ -1,7 +1,9 @@
-const UserModel = require('../models/user.model')        // Import User model for database operations
-const HTTP_STATUS = require('../constants/httpConstants') // HTTP status codes (200, 400, 404, etc.)
-const { appAssert } = require('../utils/appAssert')      // Utility function for assertions and error handling
-const PasswordUtil = require('../utils/passwordUtils')  // Utility for password hashing and comparison
+const UserModel = require('../models/user.model')
+const HTTP_STATUS = require('../constants/httpConstants')
+const { appAssert } = require('../utils/appAssert')
+const PasswordUtil = require('../utils/passwordUtils')
+const logger = require('../logger/logger')
+const { generateTokens } = require('../middlewares/jsonWebTokens')
 
 // Service function to handle user login
 const logInService = async (email, password) => {
@@ -18,11 +20,12 @@ const logInService = async (email, password) => {
     // If password is invalid, throw an error
     appAssert(isPasswordValid, "Password is incorrect, please try again", HTTP_STATUS.BAD_REQUEST)
 
-    // Log successful logins for auditing
+    const tokens = generateTokens(user)
+    const { accessToken, refreshToken } = tokens
+
     logger.info(`${user.name} logged in`)
-    
-    // Return the user object and success message if login is successful
-    return { user, message: 'Logged in succesfully' }
+
+    return { user, accessToken, refreshToken, message: 'Logged in succesfully' }
   } catch (error) {
     // Propagate the error to be handled by controller or middleware
     throw error

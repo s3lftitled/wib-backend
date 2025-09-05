@@ -3,7 +3,6 @@ const logger = require('../logger/logger')
 const { 
   createEmployeeAccountService,
   fetchAllActiveEmployeeService,
-
 } = require('../services/adminServices')
 
 class AdminController {
