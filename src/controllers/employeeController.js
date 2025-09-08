@@ -6,6 +6,7 @@ const {
   employeeTimeActionService,
   employeeTimeOutService,
   getMonthlyAttendanceService,
+  requestLeaveService,
 } = require('../services/employeeServices')
 
 class EmployeeController {
@@ -51,7 +52,6 @@ class EmployeeController {
     try {
       const { year, month, email } = req.query
 
-      // Validate required parameters
       if (!year || month === undefined) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
           success: false,
@@ -60,7 +60,7 @@ class EmployeeController {
       }
 
       const yearInt = parseInt(year)
-      const monthInt = parseInt(month) // 0-11 (JS month format)
+      const monthInt = parseInt(month)
 
       if (yearInt < 1900 || yearInt > 2100) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
@@ -82,6 +82,19 @@ class EmployeeController {
 
     } catch (error) {
       logger.error('Get monthly attendance error:', error)
+      next(error)
+    }
+  }
+
+  async requestLeaveController (req, res, next) {
+    const { userId } = req.params
+    const { reason, startDate, endDate } = req.body
+    try {
+      const { newLeaveRequest, message } = await requestLeaveService(userId, reason, startDate, endDate)
+
+      res.status(HTTP_STATUS.OK).json({ message })
+    } catch (error) {
+      logger.error('Error submitting the leave request:', error)
       next(error)
     }
   }
