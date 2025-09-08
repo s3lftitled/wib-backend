@@ -261,12 +261,12 @@ const getMonthlyAttendanceService = async (email, year, month) => {
     })
 
     // Format the data for frontend consumption
-    const attendanceData = {}
+    const userAttendanceData = {}
     
     monthlyAttendance.forEach(att => {
       const dateKey = att.date.toISOString().split('T')[0] // YYYY-MM-DD format
       
-      attendanceData[dateKey] = {
+      userAttendanceData[dateKey] = {
         date: dateKey,
         timeIn: att.timeIn ? att.timeIn.toISOString() : null,
         timeOut: att.timeOut ? att.timeOut.toISOString() : null,
@@ -279,7 +279,7 @@ const getMonthlyAttendanceService = async (email, year, month) => {
 
     return {
       success: true,
-      data: attendanceData,
+      data: userAttendanceData,
       month: month,
       year: year
     }
