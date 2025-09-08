@@ -1,4 +1,5 @@
 const mongoose = require('mongoose')
+const { LEAVE_TYPES, LEAVE_STATUS } = require('../constants/leaveRelatedConstants')
 
 const LeaveSchema = new mongoose.Schema({
   employee: {
@@ -6,6 +7,9 @@ const LeaveSchema = new mongoose.Schema({
     ref: "User",   // links to Users collection
     required: true 
   },
+  leaveType: { 
+    type: String, 
+    enum: [LEAVE_TYPES.SINGLE_DAY, LEAVE_TYPES.MULTI_DAY] },
   reason: {
     type: String,
     required: true,
@@ -21,9 +25,11 @@ const LeaveSchema = new mongoose.Schema({
     required: true
   },
   status: {
-    type: Date,
-    required: true
-  },
+    type: String,
+    required: true,
+    enum: Object.values(LEAVE_STATUS), 
+    default: LEAVE_STATUS.PENDING      
+  }
 })
 
 module.exports = mongoose.model("Leave", LeaveSchema)
