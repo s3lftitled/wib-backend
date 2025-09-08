@@ -1,9 +1,11 @@
 const UserModel = require('../models/user.model')         // User model for authentication
 const EmployeeModel = require('../models/employee.model') // Employee model for attendance tracking
+const LeaveModel = require('../models/leave.model')
 const HTTP_STATUS = require('../constants/httpConstants') // HTTP status codes (200, 401, 404, 409, etc.)
 const { appAssert } = require('../utils/appAssert')       // Utility for throwing structured errors
 const PasswordUtil = require('../utils/passwordUtils')   // Password hashing and comparison utility
 const logger = require('../logger/logger')
+const { LEAVE_TYPES } = require('../constants/leaveRelatedConstants')
 
 // Get current attendance status and determine what button to show
 const getEmployeeStatusService = async (email) => {
@@ -290,10 +292,43 @@ const getMonthlyAttendanceService = async (email, year, month) => {
 const requestLeaveService = async (userId, reason, startDate, endDate) => {
   try {
     const user = await UserModel.findById(userId)
-
+    
     appAssert(user, 'User not found', HTTP_STATUS.NOT_FOUND)
-
+    
     appAssert(typeof reason === "string", 'Reason should be a text', HTTP_STATUS.BAD_REQUEST)
+    
+    appAssert(reason.trim().length >= 15, 'Reason must be at least 15 characters long', HTTP_STATUS.BAD_REQUEST)
+    appAssert(reason.trim().length <= 200, 'Reason must not exceed 200 characters', HTTP_STATUS.BAD_REQUEST)
+    
+    const today = new Date()
+    today.setHours(0, 0, 0, 0) 
+    
+    const startDateObj = new Date(startDate)
+    startDateObj.setHours(0, 0, 0, 0) 
+    
+    const endDateObj = new Date(endDate)
+    endDateObj.setHours(0, 0, 0, 0) /
+    
+    appAssert(startDateObj > today, 'Start date must be in the future', HTTP_STATUS.BAD_REQUEST)
+    
+    appAssert(endDateObj >= startDateObj, 'End date must be after or equal to start date', HTTP_STATUS.BAD_REQUEST)
+    
+    const leaveType = startDateObj.getTime() === endDateObj.getTime() ? LEAVE_TYPES.SINGLE_DAY : LEAVE_TYPES.MULTI_DAY
+    
+    const newLeaveRequest = await LeaveModel.create({
+      employee: user._id,
+      reason,
+      startDate,
+      endDate,
+      leaveType
+    })
+    
+    logger.info(`${leaveType} leave request submitted by ${user.name}`)
+    
+    return { 
+      newLeaveRequest, 
+      message: 'Successfully submitted the leave request'
+    }
   } catch (error) {
     throw error
   }
@@ -305,4 +340,5 @@ module.exports = {
   employeeTimeActionService,
   employeeTimeOutService,
   getMonthlyAttendanceService,
+  requestLeaveService,
 }
