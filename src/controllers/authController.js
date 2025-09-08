@@ -12,9 +12,15 @@ class AuthController {
     const {  email, password } = req.body
     try {
 
-      const { user, message } = await logInService(email, password)
+      const { user, accessToken, refreshToken,  message } = await logInService(email, password)
+
+        // Set cookies
+      res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        sameSite: 'lax',
+      })
       
-      return res.status(HTTP_STATUS.OK).json({ user, message })
+      return res.status(HTTP_STATUS.OK).json({ user, accessToken, message })
     } catch (error) {
       // Log the error for debugging/monitoring
       logger.error(`Login error - ${error.message}`)
