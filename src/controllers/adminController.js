@@ -3,6 +3,7 @@ const logger = require('../logger/logger')
 const { 
   createEmployeeAccountService,
   fetchAllActiveEmployeeService,
+  fetchAllRequestLeaveService,
 } = require('../services/adminServices')
 
 class AdminController {
@@ -25,6 +26,19 @@ class AdminController {
       res.status(HTTP_STATUS.OK).json({ employees, message })
     } catch (error) {
       logger.error(`Error fetching all active employees - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async fetchAllRequestLeave (req, res, next) {
+    try {
+      const { page, pageSize } = req.query
+
+      const { data, pagination } = await fetchAllRequestLeaveService(page, pageSize)
+
+      res.status(HTTP_STATUS.OK).json({ data, pagination })
+    } catch (error) {
+      logger.error(`Error fetching all leave requests - ${error.message}`)
       next(error)
     }
   }

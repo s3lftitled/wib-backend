@@ -1,5 +1,6 @@
 const UserModel = require('../models/user.model')
 const EmployeeModel = require('../models/employee.model')
+const LeaveModel = require('../models/leave.model')
 const HTTP_STATUS = require('../constants/httpConstants')
 const ROLE_CONSTANTS = require('../constants/roleConstants')
 const { appAssert } = require('../utils/appAssert')
@@ -65,9 +66,47 @@ const fetchAllActiveEmployeeService = async () => {
 }
 
 // Fetch request leaves service
+const fetchAllRequestLeaveService = async (page = 1, pageSize = 10) => {
+  try {
+    // Validate that page and pageSize are positive integers
+    appAssert(!page <= 0 || !pageSize <= 0, 'Page and pageSize must be positive integers.', HTTP_STATUS.BAD_REQUEST) 
+
+    // Calculate the skip value (number of records to skip)
+    const skip = (page - 1) * pageSize
+
+    // Fetch the paginated leave requests
+    const allLeaveRequest = await LeaveModel.find()
+      .skip(skip)           // Skip the appropriate number of records
+      .limit(pageSize);    // Limit the results to the pageSize
+
+    // Count the total number of leave requests for pagination metadata
+    const totalRequests = await LeaveModel.countDocuments()
+
+    // Calculate total pages
+    const totalPages = Math.ceil(totalRequests / pageSize)
+
+    // Check if any leave requests are found
+    appAssert(allLeaveRequest.length > 0, 'No request leave found', HTTP_STATUS.NOT_FOUND)
+
+    // Return paginated data along with metadata
+    return {
+      data: allLeaveRequest,
+      pagination: {
+        currentPage: page,
+        pageSize: pageSize,
+        totalPages: totalPages,
+        totalRequests: totalRequests
+      }
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
 
 module.exports = {
   createEmployeeAccountService,
   fetchAllActiveEmployeeService,
-
+  fetchAllRequestLeaveService,
 }
