@@ -3,6 +3,7 @@ const HTTP_STATUS = require('../constants/httpConstants') // Centralized HTTP st
 const logger = require('../logger/logger') // Logger utility for error/info logging
 const { 
   logInService, // Service function that handles the login logic
+  changePasswordService,
 } = require('../services/authServices')
 
 class AuthController {
@@ -26,6 +27,20 @@ class AuthController {
       logger.error(`Login error - ${error.message}`)
       
       // Pass the error to the next middleware (Express error handler)
+      next(error)
+    }
+  }
+
+  async changePassword(req, res, next) {
+    try {
+      const { userId } = req.params
+      const { currentPassword, newPassword, newPasswordConfirmation } = req.body
+
+      const message = await changePasswordService(userId, currentPassword, newPassword, newPasswordConfirmation)
+
+      return res.status(HTTP_STATUS.OK).json(message)
+    } catch (error) {
+      logger.error(`Error changing password - ${error.message}`)
       next(error)
     }
   }

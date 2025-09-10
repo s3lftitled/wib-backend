@@ -4,6 +4,7 @@ const { appAssert } = require('../utils/appAssert')
 const PasswordUtil = require('../utils/passwordUtils')
 const logger = require('../logger/logger')
 const { generateTokens } = require('../middlewares/jsonWebTokens')
+const mongoose = require('mongoose')
 
 // Service function to handle user login
 const logInService = async (email, password) => {
@@ -15,7 +16,7 @@ const logInService = async (email, password) => {
     appAssert(user, "User is not found", HTTP_STATUS.NOT_FOUND)
 
     // Compare the provided password with the stored hashed password
-    const isPasswordValid = PasswordUtil.comparePassword(password, user.password)
+    const isPasswordValid = await PasswordUtil.comparePassword(password, user.password)
     
     // If password is invalid, throw an error
     appAssert(isPasswordValid, "Password is incorrect, please try again", HTTP_STATUS.BAD_REQUEST)
@@ -32,7 +33,43 @@ const logInService = async (email, password) => {
   }
 }
 
+const changePasswordService = async (userId, currentPassword, newPassword, newPasswordConfirmation) => {
+  try {
+    appAssert(mongoose.Types.ObjectId.isValid(userId), 'Invalid user id', HTTP_STATUS.UNAUTHORIZED)
+
+    appAssert(
+      typeof(currentPassword) === 'string',
+      typeof(newPassword) === 'string',
+      typeof(newPasswordConfirmation) === 'string',
+      'Invalid inputs, password should be a string',
+      HTTP_STATUS.BAD_REQUEST
+    )
+
+    const user = await UserModel.findById(userId)
+
+    const isPasswordValid = await PasswordUtil.comparePassword(currentPassword, user.password)
+
+    appAssert(isPasswordValid, 'Incorrect password, please try again', HTTP_STATUS.BAD_REQUEST)
+
+    appAssert(newPassword === newPasswordConfirmation,
+      'New password does not match',
+      HTTP_STATUS.BAD_REQUEST
+    )
+
+    const hashedPassword = await PasswordUtil.hashPassword(newPassword)
+
+    user.password = hashedPassword
+
+    await user.save()
+
+    return { message: 'Password changed succesfully' }
+  } catch (error) {
+    throw error
+  }
+}
+
 // Export the service function for use in controllers
 module.exports = { 
   logInService,
+  changePasswordService,
 }
