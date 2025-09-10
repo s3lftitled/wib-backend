@@ -17,7 +17,8 @@ const UserSchema = new mongoose.Schema({
     required: true         // This field is mandatory
   },
   displayPicture: {
-    type: String
+    type: String,
+    default: null,
   },
   role: { 
     type: String, // Data type is String

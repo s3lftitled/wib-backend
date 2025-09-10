@@ -13,6 +13,7 @@ const authRouter = require('./src/routers/authRouter')
 const employeeRouter = require('./src/routers/employeeRouter')
 const adminRouter = require('./src/routers/adminRouter')
 const tokenRouter = require('./src/routers/tokenRouter')
+const userRouter = require('./src/routers/userRouter')
 
 // Initialize the Express app
 const app = express()
@@ -42,6 +43,9 @@ app.use('/api/admin', adminRouter)
 
 // Token base routes
 app.use('/api/token', tokenRouter)
+
+// User base routes
+app.use('/api/user', userRouter)
 
 // Global error-handling middleware
 app.use(errorHandler)
