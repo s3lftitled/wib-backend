@@ -6,8 +6,7 @@ const logger = require('../logger/logger')
 const { generateTokens } = require('../middlewares/jsonWebTokens')
 const mongoose = require('mongoose')
 
-// Service function to handle user login
-const logInService = async (email, password) => {
+const logInService = async (email, password, loginType) => {
   try {
     // Find user by email in the database
     const user = await UserModel.findOne({ email })
@@ -18,17 +17,23 @@ const logInService = async (email, password) => {
     // Compare the provided password with the stored hashed password
     const isPasswordValid = await PasswordUtil.comparePassword(password, user.password)
     
-    // If password is invalid, throw an error
     appAssert(isPasswordValid, "Password is incorrect, please try again", HTTP_STATUS.BAD_REQUEST)
+
+    // Check if the login type matches the user's actual role
+    appAssert(
+      user.role === loginType,
+      `You are not authorized to log in as ${loginType}`,
+      HTTP_STATUS.BAD_REQUEST
+    )
 
     const tokens = generateTokens(user)
     const { accessToken, refreshToken } = tokens
 
-    logger.info(`${user.name} logged in`)
+    logger.info(`${user.name} logged in as ${user.role}`)
 
-    return { user, accessToken, refreshToken, message: 'Logged in succesfully' }
+    return { user, accessToken, refreshToken, message: 'Logged in successfully' }
+
   } catch (error) {
-    // Propagate the error to be handled by controller or middleware
     throw error
   }
 }

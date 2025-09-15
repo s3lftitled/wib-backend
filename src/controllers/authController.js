@@ -10,10 +10,10 @@ class AuthController {
   
   // Controller method to handle login requests
   async logInController(req, res, next) {
-    const {  email, password } = req.body
+    const {  email, password, logInType } = req.body
     try {
 
-      const { user, accessToken, refreshToken,  message } = await logInService(email, password)
+      const { user, accessToken, refreshToken,  message } = await logInService(email, password, logInType)
 
         // Set cookies
       res.cookie('refreshToken', refreshToken, {
