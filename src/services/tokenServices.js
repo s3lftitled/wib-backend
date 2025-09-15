@@ -15,7 +15,7 @@ const refreshAccessToken = async (refreshToken) => {
     }
 
     // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.SECRET_KEY)
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET)
     const userId = decoded.id
 
     // Fetch user and exclude sensitive fields like password
@@ -26,7 +26,7 @@ const refreshAccessToken = async (refreshToken) => {
     // Generate new short-lived access token
     const newAccessToken = jwt.sign(
       { id: decoded.id, role: decoded.role },
-      process.env.SECRET_KEY,
+      process.env.JWT_SECRET,
       { expiresIn: '20m' }
     )
 
