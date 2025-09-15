@@ -2,6 +2,7 @@
 const express = require('express')
 require('dotenv').config()
 const cors = require("cors")
+const cookieParser = require("cookie-parser")
 
 // Import custom modules
 const connectWithRetry = require('./src/config/connectDB')  // Function to connect to MongoDB
@@ -18,7 +19,12 @@ const userRouter = require('./src/routers/userRouter')
 // Initialize the Express app
 const app = express()
 
-app.use(cors())
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}))
+
+app.use(cookieParser())
 
 // Set server port from environment variable or use default 5001
 const port = process.env.PORT || 5000

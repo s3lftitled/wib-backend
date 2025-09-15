@@ -6,7 +6,7 @@ class TokenController {
     try {
       const { refreshToken } = req.cookies
 
-      const { newAccessToken, userId } = await TokenService.refreshAccessToken(refreshToken)
+      const { newAccessToken, userId } = await refreshAccessToken(refreshToken)
 
       res.setHeader('Authorization', `Bearer ${newAccessToken}`)
       res.status(200).json({ accessToken: newAccessToken, userId })
