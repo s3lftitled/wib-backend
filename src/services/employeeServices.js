@@ -28,6 +28,7 @@ const getEmployeeStatusService = async (email) => {
     })
 
     if (!todayAttendance) {
+      // No attendance record for today - show initial Time In
       return {
         status: 'not_clocked_in',
         buttonText: 'Time In',
@@ -37,8 +38,10 @@ const getEmployeeStatusService = async (email) => {
 
     // Check current state
     if (!todayAttendance.timeOut) {
-      // Currently clocked in
+      // Currently clocked in (not finished for the day)
+      
       if (todayAttendance.onBreak) {
+        // Currently on break - show Time In to return from break
         return {
           status: 'on_break',
           buttonText: 'Time In',
@@ -47,12 +50,26 @@ const getEmployeeStatusService = async (email) => {
           breakTime: todayAttendance.breakTime || 0
         }
       } else {
-        return {
-          status: 'working',
-          buttonText: 'Break',
-          action: 'go_on_break',
-          workStarted: todayAttendance.timeIn,
-          canSkipBreak: true
+        // Not currently on break
+        if (todayAttendance.breakTime && todayAttendance.breakTime > 0) {
+          // Break was already taken and completed - ready for final time out
+          return {
+            status: 'ready_for_time_out',
+            buttonText: 'Time Out',
+            action: 'time_out',
+            workStarted: todayAttendance.timeIn,
+            breakTime: todayAttendance.breakTime,
+            canTimeOut: true
+          }
+        } else {
+          // Break not taken yet - show Break option
+          return {
+            status: 'working',
+            buttonText: 'Break',
+            action: 'go_on_break',
+            workStarted: todayAttendance.timeIn,
+            canSkipBreak: true
+          }
         }
       }
     } else {
@@ -75,10 +92,10 @@ const getEmployeeStatusService = async (email) => {
 const employeeTimeActionService = async (email, password, skipBreak = false) => {
   try {
     const user = await UserModel.findOne({ email })
-    appAssert(user, "Invalid email or password", HTTP_STATUS.UNAUTHORIZED)
+    appAssert(user, "Invalid email or password", HTTP_STATUS.BAD_REQUEST)
 
     const isMatch = await PasswordUtil.comparePassword(password, user.password)
-    appAssert(isMatch, "Invalid email or password", HTTP_STATUS.UNAUTHORIZED)
+    appAssert(isMatch, "Invalid email or password", HTTP_STATUS.BAD_REQUEST)
 
     const employee = await EmployeeModel.findOne({ userId: user._id })
     appAssert(employee, "Employee not found", HTTP_STATUS.NOT_FOUND )
@@ -194,10 +211,10 @@ const employeeTimeActionService = async (email, password, skipBreak = false) => 
 const employeeTimeOutService = async (email, password) => {
   try {
     const user = await UserModel.findOne({ email })
-    appAssert(user, "Invalid email or password", HTTP_STATUS.UNAUTHORIZED)
+    appAssert(user, "Invalid email or password", HTTP_STATUS.BAD_REQUEST)
 
     const isMatch = await PasswordUtil.comparePassword(password, user.password)
-    appAssert(isMatch, "Invalid email or password", HTTP_STATUS.UNAUTHORIZED)
+    appAssert(isMatch, "Invalid email or password", HTTP_STATUS.BAD_REQUEST)
 
     const employee = await EmployeeModel.findOne({ userId: user._id })
     appAssert(employee, "Employee not found", HTTP_STATUS.NOT_FOUND)
