@@ -12,11 +12,12 @@ const {
 class EmployeeController {
   
   async getEmployeeeStatusController(req, res, next) {
-    const { email } = req.body
+    const { email } = req.query
 
     try {
-      const data = await getEmployeeStatusService(email)
-      return res.status(HTTP_STATUS.OK).json({ data })
+      const employeeStatus = await getEmployeeStatusService(email)
+
+      return res.status(HTTP_STATUS.OK).json(employeeStatus)
     } catch (error) {
       logger.error(error)
       next(error)
