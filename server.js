@@ -19,9 +19,20 @@ const userRouter = require('./src/routers/userRouter')
 // Initialize the Express app
 const app = express()
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174'
+]
+  
 app.use(cors({
-  origin: 'http://localhost:5173',
-  credentials: true
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+  credentials: true, 
 }))
 
 app.use(cookieParser())

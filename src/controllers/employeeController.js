@@ -89,9 +89,9 @@ class EmployeeController {
 
   async requestLeaveController (req, res, next) {
     const { userId } = req.params
-    const { reason, startDate, endDate } = req.body
+    const { reason, startDate, endDate, leaveCategory } = req.body
     try {
-      const { newLeaveRequest, message } = await requestLeaveService(userId, reason, startDate, endDate)
+      const { newLeaveRequest, message } = await requestLeaveService(userId, reason, startDate, endDate, leaveCategory)
 
       res.status(HTTP_STATUS.OK).json({ message })
     } catch (error) {
