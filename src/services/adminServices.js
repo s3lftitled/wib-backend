@@ -256,6 +256,18 @@ const createNewDepartmentService = async (departmentName, createdBy) => {
   }
 }
 
+const fetchDepartmentsService = async () => {
+  try {
+    const departments = await DepartmentModel.find({});
+
+    appAssert(departments || departments.length !== 0, 'No departments found', HTTP_STATUS.NOT_FOUND)
+
+    return { message: "Departments fetched successfully", departments }
+  } catch (error) {
+    throw error
+  }
+}
+
 module.exports = {
   createEmployeeAccountService,
   fetchAllActiveEmployeeService,
@@ -263,4 +275,5 @@ module.exports = {
   approveLeaveRequestService,
   declineLeaveRequestService,
   createNewDepartmentService,
+  fetchDepartmentsService,
 }

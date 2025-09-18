@@ -11,7 +11,6 @@ const DepartmentSchema= new mongoose.Schema({
   }],
   createdBy: {
     type: String,
-    unique: true,
   },
   createdAt: { 
     type: Date,

@@ -7,6 +7,7 @@ const {
   approveLeaveRequestService,
   declineLeaveRequestService,
   createNewDepartmentService,
+  fetchDepartmentsService,
 } = require('../services/adminServices')
 
 class AdminController {
@@ -84,6 +85,17 @@ class AdminController {
       res.status(HTTP_STATUS.OK).json({ newDepartment, message })
     } catch (error) {
       logger.error(`Error creating new department - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async fetchAllDepartments (req, res, next) {
+    try {
+      const { departments, message } = await fetchDepartmentsService()
+
+      res.status(HTTP_STATUS.OK).json({ departments, message })
+    } catch (error) {
+      logger.error(`Error fetching departments - ${error.message}`)
       next(error)
     }
   }
