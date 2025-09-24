@@ -1,6 +1,14 @@
 const mongoose = require("mongoose")
 const ROLE_CONSTANTS = require("../constants/roleConstants")
 
+const employeeLeaveSchema = new mongoose.Schema({
+  beginning: { type: Number, default: 0 },  // Starting balance
+  availments: { type: Number, default: 0 }, // Taken
+  remaining: { type: Number, default: 0 },  // Left
+  active: { type: Number, default: 0 },     // Currently active
+  reserved: { type: Number, default: 0 },   // Reserved
+}, { _id: false }); // Disable _id for subdocument
+
 const EmployeeSchema = new mongoose.Schema({
   userId: { 
     type: mongoose.Schema.Types.ObjectId, 
@@ -39,7 +47,12 @@ const EmployeeSchema = new mongoose.Schema({
       onBreak: { type: Boolean, default: false }, // currently on break status
       breakStart: { type: Date } // when current break started
     }
-  ]
+  ],
+  // Leave balances by type
+  leaveBalance: {
+    sickLeave: { type: employeeLeaveSchema, default: () => ({}) },
+    vacationLeave: { type: employeeLeaveSchema, default: () => ({}) }
+  },
 })
 
 module.exports = mongoose.model("Employee", EmployeeSchema)

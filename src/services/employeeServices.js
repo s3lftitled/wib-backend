@@ -306,7 +306,7 @@ const getMonthlyAttendanceService = async (email, year, month) => {
   }
 }
 
-const requestLeaveService = async (userId, reason, startDate, endDate) => {
+const requestLeaveService = async (userId, reason, startDate, endDate, leaveCategory) => {
   try {
     const user = await UserModel.findById(userId)
     
@@ -324,11 +324,15 @@ const requestLeaveService = async (userId, reason, startDate, endDate) => {
     startDateObj.setHours(0, 0, 0, 0) 
     
     const endDateObj = new Date(endDate)
-    endDateObj.setHours(0, 0, 0, 0) /
+    endDateObj.setHours(0, 0, 0, 0)
     
     appAssert(startDateObj > today, 'Start date must be in the future', HTTP_STATUS.BAD_REQUEST)
     
     appAssert(endDateObj >= startDateObj, 'End date must be after or equal to start date', HTTP_STATUS.BAD_REQUEST)
+    
+    // Calculate number of days
+    const timeDifference = endDateObj.getTime() - startDateObj.getTime()
+    const numberOfDays = Math.floor(timeDifference / (1000 * 60 * 60 * 24)) + 1
     
     const leaveType = startDateObj.getTime() === endDateObj.getTime() ? LEAVE_TYPES.SINGLE_DAY : LEAVE_TYPES.MULTI_DAY
     
@@ -337,13 +341,16 @@ const requestLeaveService = async (userId, reason, startDate, endDate) => {
       reason,
       startDate,
       endDate,
-      leaveType
+      leaveCategory,
+      leaveType,
+      numberOfDays,
     })
     
-    logger.info(`${leaveType} leave request submitted by ${user.name}`)
+    logger.info(`${leaveType} leave request submitted by ${user.name} for ${numberOfDays} day(s)`)
     
     return { 
       newLeaveRequest, 
+      numberOfDays,
       message: 'Successfully submitted the leave request'
     }
   } catch (error) {

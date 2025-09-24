@@ -27,7 +27,7 @@ const refreshAccessToken = async (refreshToken) => {
     const newAccessToken = jwt.sign(
       { id: decoded.id, role: decoded.role },
       process.env.JWT_SECRET,
-      { expiresIn: '20m' }
+      { expiresIn: '10m' }
     )
 
     // Return both token and user

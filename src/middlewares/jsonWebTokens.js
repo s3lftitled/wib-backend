@@ -10,7 +10,7 @@ const generateTokens = (user) => {
   const accessToken = jwt.sign(
     { id: user._id },
     secretKey,
-    { expiresIn: '20m' } 
+    { expiresIn: '10m' } 
   )
 
   // Generate refresh token with a 5-hour expiry
@@ -22,7 +22,6 @@ const generateTokens = (user) => {
 
   return { accessToken, refreshToken }
 }
-
 
 const verifyToken = (req, res, next) => {
   // Extract token from cookies
