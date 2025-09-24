@@ -358,6 +358,41 @@ const requestLeaveService = async (userId, reason, startDate, endDate, leaveCate
   }
 }
 
+const employeeTimeOut = async (email, password) => {
+    try {
+        // Find the user by email
+        const user = await UserModel.findOne({ email })
+        appAssert(user, HTTP_STATUS.UNAUTHORIZED, "Invalid email or password")
+
+        // Check if the password matches
+        const isMatch = await PasswordUtil.comparePassword(password, user.password)
+        appAssert(isMatch, HTTP_STATUS.UNAUTHORIZED, "Invalid email or password")
+
+        // Find the corresponding employee record
+        const employee = await EmployeeModel.findOne({ userId: user._id })
+        appAssert(employee, HTTP_STATUS.NOT_FOUND, "Employee not found")
+
+        // Check if employee is clocked in
+        if (employee.attendance.length === 0) {
+            appAssert(false, HTTP_STATUS.CONFLICT, "Employee is not clocked in")
+        }
+
+        const employeeTimeOut = new Date()
+
+        // Clock out the employee
+        employee.attendance[employee.attendance.length - 1].timeOut = employeeTimeOut
+        await employee.save()
+
+        logger.info(`${user.name} timed out:  ${employeeTimeOut}`)
+
+        // Return the employee object and success message
+        return { employee, message: 'Timed-out successfully' }
+    } catch (error) {
+        // Propagate the error to be handled by the controller/middleware
+        throw error
+    }
+}
+
 // Export the service function
 module.exports = {
   getEmployeeStatusService,
