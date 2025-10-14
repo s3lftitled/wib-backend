@@ -38,9 +38,8 @@ class EmailUtil {
    * @param {string} baseUrl - Base URL of your frontend app where the employee can set the password
    * @returns {Promise<string>} The generated token
    */
-  async sendPasswordSetupEmail(email) {
-    const token = this.generateToken()
-    const setupLink = `${process.env.BASE_URL}/set-password?token=${token}&email=${encodeURIComponent(email)}`
+  async sendPasswordSetupEmail(email, token) {
+    const setupLink = `${process.env.BASE_URL}/activate-account/${token}/${encodeURIComponent(email)}`
 
     try {
       const mailOptions = {

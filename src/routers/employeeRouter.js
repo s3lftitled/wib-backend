@@ -7,6 +7,7 @@ router.post('/v1/time-in', EmployeeController.employeeTimeActionController )
 router.post('/v1/time-out', EmployeeController.employeeTimeOutController)
 router.get('/v1/monthly-record', EmployeeController.getMonthlyAttendanceController)
 router.post('/v1/submit-leave-request/:userId', EmployeeController.requestLeaveController)
+router.put('/v1/activate-account', EmployeeController.activateAccount)
 
 // Export the router to use in the main app
 module.exports = router

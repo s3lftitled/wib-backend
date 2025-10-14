@@ -2,6 +2,7 @@ const UserModel = require('../models/user.model')
 const EmployeeModel = require('../models/employee.model')
 const LeaveModel = require('../models/leave.model')
 const DepartmentModel = require('../models/department.model')
+const HolidayModel = require('../models/holiday.model')
 const HTTP_STATUS = require('../constants/httpConstants')
 const ROLE_CONSTANTS = require('../constants/roleConstants')
 const { appAssert } = require('../utils/appAssert')
@@ -12,7 +13,6 @@ const logger = require('../logger/logger')
 
 const createEmployeeAccountService = async (name, email) => {
   try {
-   
     appAssert(typeof name === "string", 'Invalid name, please try again', HTTP_STATUS.BAD_REQUEST)
     appAssert(validator.isEmail(email), 'Invalid email, please try again', HTTP_STATUS.BAD_REQUEST)
 
@@ -20,12 +20,19 @@ const createEmployeeAccountService = async (name, email) => {
     appAssert(!existingEmployee, 'Employee email already exists', HTTP_STATUS.BAD_REQUEST)
 
     const hashedPassword = await PasswordUtil.createTempPassword()
+    const token = EmailUtil.generateToken()
+
+    // Set token expiration (4 hours from now)
+    const tokenExpiration = new Date()
+    tokenExpiration.setHours(tokenExpiration.getHours() + 4)
 
     const newUser = await UserModel.create({
       email,
       name,
       password: hashedPassword,
-      role: ROLE_CONSTANTS[101]
+      role: ROLE_CONSTANTS[101],
+      token: token,
+      tokenExpires: tokenExpiration,
     })
 
     await newUser.save()
@@ -36,9 +43,9 @@ const createEmployeeAccountService = async (name, email) => {
 
     await newEmployee.save()
   
-    await EmailUtil.sendPasswordSetupEmail(email)
+    await EmailUtil.sendPasswordSetupEmail(email, token) 
 
-    logger.info(`New employee created ${email}`)
+    logger.info(`New employee created ${email} with token expiring at ${tokenExpiration}`)
 
     return { newEmployee, message: 'New employee successfully created!'}
   } catch (error) {
@@ -50,6 +57,8 @@ const fetchAllActiveEmployeeService = async () => {
   try {
     const allEmployees = await EmployeeModel.find()
     .populate( "userId", "name email displayImage isActive")
+
+    console.log(allEmployees)
     
     const employees = allEmployees.map(emp => ({
         name: emp.userId.name,
@@ -57,6 +66,8 @@ const fetchAllActiveEmployeeService = async () => {
         displayImage: emp.userId.displayImage,
         isActive: emp.userId.isActive,
       }))
+
+      console.log(employees)
 
     appAssert(employees.length > 0, 'No active employees found', HTTP_STATUS.NOT_FOUND)
 
@@ -268,6 +279,111 @@ const fetchDepartmentsService = async () => {
   }
 }
 
+const createHolidayService = async (name, holidate, description, type, createdBy) => {
+  try {
+    // ✅ Validate inputs
+    appAssert(typeof name === "string" && name.trim().length > 0, 'Invalid holiday name', HTTP_STATUS.BAD_REQUEST)
+    appAssert(holidate && !isNaN(Date.parse(holidate)), 'Invalid holiday date', HTTP_STATUS.BAD_REQUEST)
+
+    // ✅ Sanitize name
+    const sanitizedName = name.trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase()
+      .replace(/\b\w/g, l => l.toUpperCase()) // Title Case
+
+    // ✅ Check if holiday already exists for the same date
+    const existingHoliday = await HolidayModel.findOne({ 
+      name: sanitizedName, 
+      holidate: new Date(holidate) 
+    })
+    appAssert(!existingHoliday, 'Holiday already exists on this date', HTTP_STATUS.CONFLICT)
+
+    // ✅ Create new holiday
+    const newHoliday = await HolidayModel.create({
+      name: sanitizedName,
+      holidate: new Date(holidate),
+      description: description || "",
+      type: type || "public",
+      createdBy: createdBy || "system",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+
+    await newHoliday.save()
+
+    logger.info(`New holiday created: ${sanitizedName} on ${holidate}`)
+
+    return { 
+      holiday: {
+        id: newHoliday._id,
+        name: newHoliday.name,
+        holidate: newHoliday.holidate,
+        description: newHoliday.description,
+        type: newHoliday.type,
+      },
+      message: 'Holiday created successfully!'
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
+const fetchHolidaysService = async (year, type) => {
+  try {
+    // Build query filter
+    let query = {}
+
+    // ✅ Filter by year if provided
+    if (year) {
+      appAssert(!isNaN(year) && year > 1900 && year < 3000, 'Invalid year provided', HTTP_STATUS.BAD_REQUEST)
+      
+      const startDate = new Date(`${year}-01-01`)
+      const endDate = new Date(`${year}-12-31`)
+      
+      query.holidate = {
+        $gte: startDate,
+        $lte: endDate
+      }
+    }
+
+    // ✅ Filter by type if provided
+    if (type) {
+      appAssert(typeof type === "string" && type.trim().length > 0, 'Invalid holiday type', HTTP_STATUS.BAD_REQUEST)
+      query.type = type.toLowerCase()
+    }
+
+    // ✅ Fetch holidays sorted by date
+    const holidays = await HolidayModel.find(query)
+      .sort({ holidate: 1 }) // Sort by date ascending
+      .lean() // For better performance
+
+    appAssert(holidays && holidays.length > 0, 'No holidays found', HTTP_STATUS.OK)
+
+    // ✅ Format response
+    const formattedHolidays = holidays.map(holiday => ({
+      id: holiday._id,
+      name: holiday.name,
+      date: holiday.holidate,
+      description: holiday.description || "",
+      type: holiday.type,
+      createdBy: holiday.createdBy,
+      createdAt: holiday.createdAt
+    }))
+
+    logger.info(`Fetched ${holidays.length} holidays${year ? ` for year ${year}` : ''}${type ? ` of type ${type}` : ''}`)
+
+    return { 
+      holidays: formattedHolidays,
+      count: holidays.length,
+      message: 'Holidays fetched successfully!'
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
 module.exports = {
   createEmployeeAccountService,
   fetchAllActiveEmployeeService,
@@ -276,4 +392,6 @@ module.exports = {
   declineLeaveRequestService,
   createNewDepartmentService,
   fetchDepartmentsService,
+  createHolidayService,
+  fetchHolidaysService,
 }

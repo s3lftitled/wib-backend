@@ -34,6 +34,12 @@ const UserSchema = new mongoose.Schema({
     default: true,
     required: true
   },
+  token: {
+    type: String,
+  },
+  tokenExpires: {
+    type: Date
+  }
 })
 
 module.exports = mongoose.model("User", UserSchema)

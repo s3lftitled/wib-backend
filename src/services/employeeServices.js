@@ -358,6 +358,58 @@ const requestLeaveService = async (userId, reason, startDate, endDate, leaveCate
   }
 }
 
+const activateAccountService = async (email, token, newPassword, newPasswordConfirmation) => {
+  try {
+    // Input validation
+    appAssert(validator.isEmail(email), 'Invalid email format', HTTP_STATUS.BAD_REQUEST)
+    appAssert(typeof token === 'string' && token.length > 0, 'Invalid token', HTTP_STATUS.BAD_REQUEST)
+    appAssert(typeof newPassword === 'string' && newPassword.length >= 8, 'Password must be at least 8 characters', HTTP_STATUS.BAD_REQUEST)
+    appAssert(newPassword === newPasswordConfirmation, 'Passwords do not match', HTTP_STATUS.BAD_REQUEST)
+
+    // Find user by email
+    const user = await UserModel.findOne({ email })
+    appAssert(user, 'User not found', HTTP_STATUS.NOT_FOUND)
+
+    // Check if token matches
+    appAssert(user.token === token, 'Invalid or expired token', HTTP_STATUS.BAD_REQUEST)
+
+    // Check if token exists and has expiration
+    appAssert(user.token, 'No activation token found for this user', HTTP_STATUS.BAD_REQUEST)
+    appAssert(user.tokenExpires, 'Token expiration not set', HTTP_STATUS.BAD_REQUEST)
+
+    // Check if token is not expired
+    const currentTime = new Date()
+    appAssert(user.tokenExpires > currentTime, 'Token has expired. Please request a new activation link', HTTP_STATUS.BAD_REQUEST)
+
+    // Hash the new password
+    const hashedPassword = await PasswordUtil.hashPassword(newPassword)
+
+    // Update user - set new password and clear token data
+    user.password = hashedPassword
+    user.token = undefined
+    user.tokenExpires = undefined
+    user.isActive = true 
+
+    await user.save()
+
+    logger.info(`Account activated successfully for user: ${email}`)
+
+    return { 
+      message: 'Account activated successfully. You can now login with your new password.',
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        isActive: user.isActive
+      }
+    }
+
+  } catch (error) {
+    logger.error(`Account activation failed for ${email}: ${error.message}`)
+    throw error
+  }
+}
+
 // Export the service function
 module.exports = {
   getEmployeeStatusService,
@@ -365,4 +417,5 @@ module.exports = {
   employeeTimeOutService,
   getMonthlyAttendanceService,
   requestLeaveService,
+  activateAccountService,
 }

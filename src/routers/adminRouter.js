@@ -1,7 +1,6 @@
 const express = require('express')
 const router = express.Router()
 const AdminController = require('../controllers/adminController')
-const adminController = require('../controllers/adminController')
 
 router.post('/v1/create-employee', AdminController.createEmployeeAccount)
 router.get('/v1/fetch-active-employees', AdminController.fetchAllActiveEmployee)
@@ -10,5 +9,7 @@ router.put('/v1/approve-leave-request/:leaveId/:approvedBy', AdminController.app
 router.put('/v1/decline-leave-request/:leaveId/:declinedBy', AdminController.declineLeaveRequest)
 router.post('/v1/create-new-department/:createdBy', AdminController.createNewDepartment)
 router.get('/v1/fetch-departments', AdminController.fetchAllDepartments)
+router.post('/v1/add-holiday/:createdBy', AdminController.createHoliday)
+router.get('/v1/fetch-all-holidays', AdminController.fetchHolidays)
 
 module.exports = router

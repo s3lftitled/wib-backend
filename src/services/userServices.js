@@ -78,5 +78,6 @@ const uploadDisplayImageService = async (userId, base64Image) => {
 }
 
 module.exports = {
+  changeNameService,
   uploadDisplayImageService,
 }

@@ -7,6 +7,7 @@ const {
   employeeTimeOutService,
   getMonthlyAttendanceService,
   requestLeaveService,
+  activateAccountService,
 } = require('../services/employeeServices')
 
 class EmployeeController {
@@ -96,6 +97,20 @@ class EmployeeController {
       res.status(HTTP_STATUS.OK).json({ message })
     } catch (error) {
       logger.error('Error submitting the leave request:', error)
+      next(error)
+    }
+  }
+
+  async activateAccount (req, res, next) {
+    const { email, token } = req.query
+    const { newPassword, newPasswordConfirmation } = req.body
+    try {
+
+      const { message } = await activateAccountService(email, token, newPassword, newPasswordConfirmation)
+
+      res.status(HTTP_STATUS.OK).json({ message })
+    } catch (error) {
+      logger.error('Error activating account:', error)
       next(error)
     }
   }

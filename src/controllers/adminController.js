@@ -8,6 +8,8 @@ const {
   declineLeaveRequestService,
   createNewDepartmentService,
   fetchDepartmentsService,
+  createHolidayService,
+  fetchHolidaysService,
 } = require('../services/adminServices')
 
 class AdminController {
@@ -96,6 +98,31 @@ class AdminController {
       res.status(HTTP_STATUS.OK).json({ departments, message })
     } catch (error) {
       logger.error(`Error fetching departments - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async createHoliday (req, res, next) {
+    const { name, holidate, description, type } = req.body
+    const { createdBy } = req.params
+    try {
+      const { message } = await createHolidayService(name, holidate, description, type, createdBy)
+
+      res.status(HTTP_STATUS.CREATED).json({ message })
+    } catch (error) {
+      logger.error(`Error adding holiday - ${error.message}`)
+      next(error)
+    }
+  }
+  
+  async fetchHolidays (req, res, next) {
+    const { year, type } = req.query
+    try {
+      const { holidays, count, message } = await fetchHolidaysService(year, type)
+
+      res.status(HTTP_STATUS.OK).json({ holidays, count, message })
+    } catch (error) {
+      logger.error(`Error fetching holidays - ${error.message}`)
       next(error)
     }
   }
