@@ -10,6 +10,11 @@ const {
   fetchDepartmentsService,
   createHolidayService,
   fetchHolidaysService,
+  createScheduleSlotService,
+  deleteScheduleSlotService,
+  assignEmployeeToScheduleService,
+  changeAssignedEmployeeService,
+  fetchScheduleSlotService,
 } = require('../services/adminServices')
 
 class AdminController {
@@ -123,6 +128,75 @@ class AdminController {
       res.status(HTTP_STATUS.OK).json({ holidays, count, message })
     } catch (error) {
       logger.error(`Error fetching holidays - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async createScheduleSlot (req, res, next) {
+    const { date, startTime, endTime } = req.body
+    const { adminUserId } = req.params
+    try {
+      const { schedule, message } = await createScheduleSlotService(date, startTime, endTime, adminUserId)
+
+      res.status(HTTP_STATUS.CREATED).json({ schedule, message})
+    } catch (error) {
+      logger.error(`Error creating schedule slot - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async deleteScheduleSlot (req, res, next) {
+    const { scheduleId } = req.params
+    try {
+      const message = await deleteScheduleSlotService(scheduleId)
+
+      res.status(HTTP_STATUS.OK).json({ message })
+    } catch (error) {
+      logger.error(`Error deleting schedule slot - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async assignEmployeeToSchedule (req, res, next) {
+    const { scheduleId, employeeId } = req.params
+    try {
+      const { message } = await assignEmployeeToScheduleService(scheduleId, employeeId) 
+
+      res.status(HTTP_STATUS.OK).json(message)
+    } catch (error) {
+      logger.error(`Error assigning employee to schedule - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async changeAssignedEmployee (req, res, next) {
+    const { scheduleId, employeeId } = req.params
+    try {
+      const { message } = await changeAssignedEmployeeService(scheduleId, employeeId) 
+
+      res.status(HTTP_STATUS.OK).json(message)
+    } catch (error) {
+      logger.error(`Error assigning employee to schedule - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async fetchScheduleSlots (req, res, next) {
+    const { month, year } = req.query
+    try {
+      const { schedules, count, period, message } = await fetchScheduleSlotService(
+        parseInt(month), 
+        parseInt(year)
+      )
+
+      res.status(HTTP_STATUS.OK).json({ 
+        schedules, 
+        count, 
+        period, 
+        message 
+      })
+    } catch (error) {
+      logger.error(`Error fetching schedule slots - ${error.message}`)
       next(error)
     }
   }

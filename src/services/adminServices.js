@@ -3,6 +3,7 @@ const EmployeeModel = require('../models/employee.model')
 const LeaveModel = require('../models/leave.model')
 const DepartmentModel = require('../models/department.model')
 const HolidayModel = require('../models/holiday.model')
+const ScheduleModel = require('../models/schedule.model')
 const HTTP_STATUS = require('../constants/httpConstants')
 const ROLE_CONSTANTS = require('../constants/roleConstants')
 const { appAssert } = require('../utils/appAssert')
@@ -61,6 +62,7 @@ const fetchAllActiveEmployeeService = async () => {
     console.log(allEmployees)
     
     const employees = allEmployees.map(emp => ({
+        id: emp._id,
         name: emp.userId.name,
         email: emp.userId.email,
         displayImage: emp.userId.displayImage,
@@ -384,6 +386,208 @@ const fetchHolidaysService = async (year, type) => {
   }
 }
 
+const createScheduleSlotService = async (date, startTime, endTime, adminUserId) => {
+  try {
+    appAssert(date, "Date is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(startTime, "Start time is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(endTime, "End time is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(adminUserId, "Admin user ID is required", HTTP_STATUS.BAD_REQUEST)
+
+    const start = new Date(`${date}T${startTime}`)
+    const end = new Date(`${date}T${endTime}`)
+
+    appAssert(start < end, "Start time must be before end time", HTTP_STATUS.BAD_REQUEST)
+
+    const admin = await UserModel.findById(adminUserId)
+    appAssert(admin && admin.role === ROLE_CONSTANTS[202], "Only admins can create schedule slots", HTTP_STATUS.FORBIDDEN)
+
+    const newSchedule = await ScheduleModel.create({
+      date: new Date(date),
+      time: { start, end },
+      createdBy: adminUserId
+    })
+
+    return {
+      schedule: {
+        id: newSchedule._id,
+        date: newSchedule.date,
+        start: newSchedule.time.start,
+        end: newSchedule.time.end
+      },
+      message: "Schedule slot created successfully"
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
+const deleteScheduleSlotService = async (scheduleId) => {
+  try {
+    appAssert(scheduleId, "Schedule ID is required", HTTP_STATUS.BAD_REQUEST)
+
+    const schedule = await ScheduleModel.findById(scheduleId)
+    appAssert(schedule, "Schedule not found", HTTP_STATUS.NOT_FOUND)
+
+    await ScheduleModel.findByIdAndDelete(scheduleId)
+
+    return {
+      message: "Schedule deleted successfully",
+      deletedSchedule: schedule,
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
+const assignEmployeeToScheduleService = async (scheduleId, employeeId) => {
+  try {
+    appAssert(scheduleId, "Schedule ID is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(employeeId, "Employee ID is required", HTTP_STATUS.BAD_REQUEST)
+
+    const schedule = await ScheduleModel.findById(scheduleId)
+    appAssert(schedule, "Schedule not found", HTTP_STATUS.NOT_FOUND)
+    appAssert(!schedule.assignedEmployee, "Schedule already has an assigned employee", HTTP_STATUS.CONFLICT)
+
+    const employee = await EmployeeModel.findById(employeeId)
+    appAssert(employee, "Employee not found", HTTP_STATUS.NOT_FOUND)
+
+    // Check if employee has a conflicting schedule
+    const conflict = await ScheduleModel.findOne({
+      assignedEmployee: employeeId,
+      date: schedule.date,
+      "time.start": { $lt: schedule.time.end },
+      "time.end": { $gt: schedule.time.start }
+    })
+
+    appAssert(!conflict, "Employee has a conflicting schedule", HTTP_STATUS.CONFLICT)
+
+    schedule.assignedEmployee = employeeId
+    await schedule.save()
+
+    return {
+      message: `Employee assigned to schedule ${scheduleId}`,
+      scheduleId: schedule._id,
+      employeeId: employee._id
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
+const changeAssignedEmployeeService = async (scheduleId, employeeId) => {
+  try {
+    appAssert(scheduleId, "Schedule ID is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(employeeId, "Employee ID is required", HTTP_STATUS.BAD_REQUEST)
+
+    const schedule = await ScheduleModel.findById(scheduleId)
+    appAssert(schedule, "Schedule not found", HTTP_STATUS.NOT_FOUND)
+    appAssert(schedule.assignedEmployee, "No employee currently assigned to this schedule", HTTP_STATUS.BAD_REQUEST)
+
+    // Prevent reassigning to the same employee
+    if (schedule.assignedEmployee.toString() === employeeId) {
+      appAssert(false, "This employee is already assigned to the schedule", HTTP_STATUS.CONFLICT)
+    }
+
+    const employee = await EmployeeModel.findById(employeeId)
+    appAssert(employee, "Employee not found", HTTP_STATUS.NOT_FOUND)
+
+    // Check if employee has a conflicting schedule
+    const conflict = await ScheduleModel.findOne({
+      assignedEmployee: employeeId,
+      date: schedule.date,
+      "time.start": { $lt: schedule.time.end },
+      "time.end": { $gt: schedule.time.start }
+    })
+
+    appAssert(!conflict, "Employee has a conflicting schedule", HTTP_STATUS.CONFLICT)
+
+    // Update assigned employee
+    schedule.assignedEmployee = employeeId
+    await schedule.save()
+
+    return {
+      message: `Employee for schedule ${scheduleId} has been changed successfully`,
+      scheduleId: schedule._id,
+      newEmployeeId: employee._id
+    }
+  } catch (error) {
+    throw error
+  }
+} 
+
+const fetchScheduleSlotService = async (month, year) => {
+  try {
+    // Validate inputs
+    appAssert(!isNaN(year) && year > 1900 && year < 3000, 'Invalid year provided', HTTP_STATUS.BAD_REQUEST)
+    appAssert(!isNaN(month) && month >= 1 && month <= 12, 'Invalid month provided', HTTP_STATUS.BAD_REQUEST)
+
+    // Create date range for the month
+    const startDate = new Date(year, month - 1, 1) // month is 0-indexed in Date
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999) // Last day of month
+
+    // Build query
+    const query = {
+      date: {
+        $gte: startDate,
+        $lte: endDate
+      }
+    }
+
+    // Fetch schedule slots with populated employee and creator details
+    const scheduleSlots = await ScheduleModel.find(query)
+      .populate({
+        path: 'assignedEmployee',
+        populate: {
+          path: 'userId',
+          select: 'name email displayImage isActive'
+        }
+      })
+      .populate('createdBy', 'name email')
+      .sort({ date: 1, 'time.start': 1 }) // Sort by date, then by start time
+      .lean()
+
+    appAssert(scheduleSlots && scheduleSlots.length > 0, 'No schedule slots found for this period', HTTP_STATUS.OK)
+
+    // Format response with populated employee details
+    const formattedSchedules = scheduleSlots.map(schedule => ({
+      id: schedule._id,
+      date: schedule.date,
+      startTime: schedule.time.start,
+      endTime: schedule.time.end,
+      assignedEmployee: schedule.assignedEmployee ? {
+        id: schedule.assignedEmployee._id,
+        name: schedule.assignedEmployee.userId?.name || 'Unknown',
+        email: schedule.assignedEmployee.userId?.email || 'Unknown',
+        displayImage: schedule.assignedEmployee.userId?.displayImage || null,
+        isActive: schedule.assignedEmployee.userId?.isActive || false
+      } : null,
+      createdBy: {
+        id: schedule.createdBy._id,
+        name: schedule.createdBy.name,
+        email: schedule.createdBy.email
+      },
+      createdAt: schedule.createdAt
+    }))
+
+    logger.info(`Fetched ${scheduleSlots.length} schedule slots for ${year}-${month}`)
+
+    return {
+      schedules: formattedSchedules,
+      count: scheduleSlots.length,
+      period: {
+        month,
+        year,
+        startDate,
+        endDate
+      },
+      message: 'Schedule slots fetched successfully!'
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
 module.exports = {
   createEmployeeAccountService,
   fetchAllActiveEmployeeService,
@@ -394,4 +598,9 @@ module.exports = {
   fetchDepartmentsService,
   createHolidayService,
   fetchHolidaysService,
+  createScheduleSlotService,
+  deleteScheduleSlotService,
+  assignEmployeeToScheduleService,
+  changeAssignedEmployeeService,
+  fetchScheduleSlotService,
 }

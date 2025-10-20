@@ -11,5 +11,10 @@ router.post('/v1/create-new-department/:createdBy', AdminController.createNewDep
 router.get('/v1/fetch-departments', AdminController.fetchAllDepartments)
 router.post('/v1/add-holiday/:createdBy', AdminController.createHoliday)
 router.get('/v1/fetch-all-holidays', AdminController.fetchHolidays)
+router.post('/v1/add-schedule-slot/:adminUserId', AdminController.createScheduleSlot)
+router.delete('/v1/delete/schedule-slot/:scheduleId', AdminController.deleteScheduleSlot)
+router.post('/v1/assign-employee-schedule/:scheduleId/:employeeId', AdminController.assignEmployeeToSchedule)
+router.put('/v1/change-assigned-employee/:scheduleId/:employeeId', AdminController.changeAssignedEmployee)
+router.get('/v1/fetch-schedule-slots', AdminController.fetchScheduleSlots)
 
 module.exports = router
