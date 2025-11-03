@@ -8,6 +8,7 @@ const cookieParser = require("cookie-parser")
 const connectWithRetry = require('./src/config/connectDB')  // Function to connect to MongoDB
 const logger = require('./src/logger/logger')         // Custom logger for logging info and errors
 const errorHandler = require('./src/middlewares/errorHandler') // Global error handler middleware
+const { setupSwagger } = require('./src/config/swagger')
 
 // Import route modules
 const authRouter = require('./src/routers/authRouter')
@@ -21,7 +22,8 @@ const app = express()
 
 const allowedOrigins = [
   'http://localhost:5173',
-  'http://localhost:5174'
+  'http://localhost:5174',
+  'http://localhost:5000'
 ]
   
 app.use(cors({
@@ -43,6 +45,8 @@ const port = process.env.PORT || 5000
 // Middleware to parse incoming JSON and URL-encoded data with high size limits
 app.use(express.json({ limit: '100mb' }))
 app.use(express.urlencoded({ extended: true, limit: '100mb', parameterLimit: 1000000 }))
+
+setupSwagger(app)
 
 // Endpoint for checking the health of the server
 app.get('/health-check', (req, res) => {

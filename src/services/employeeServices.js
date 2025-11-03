@@ -1,6 +1,7 @@
 const UserModel = require('../models/user.model')         // User model for authentication
 const EmployeeModel = require('../models/employee.model') // Employee model for attendance tracking
 const LeaveModel = require('../models/leave.model')
+const ScheduleModel = require("../models/schedule.model")
 const HTTP_STATUS = require('../constants/httpConstants') // HTTP status codes (200, 401, 404, 409, etc.)
 const { appAssert } = require('../utils/appAssert')       // Utility for throwing structured errors
 const PasswordUtil = require('../utils/passwordUtils')   // Password hashing and comparison utility
@@ -98,13 +99,24 @@ const employeeTimeActionService = async (email, password, skipBreak = false) => 
     appAssert(isMatch, "Invalid email or password", HTTP_STATUS.BAD_REQUEST)
 
     const employee = await EmployeeModel.findOne({ userId: user._id })
-    appAssert(employee, "Employee not found", HTTP_STATUS.NOT_FOUND )
+    appAssert(employee, "Employee not found", HTTP_STATUS.NOT_FOUND)
 
     // Get current date in Philippine time
     const now = new Date()
     const philippineTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Manila" }))
     const todayDateString = philippineTime.toISOString().split('T')[0]
     const todayDate = new Date(todayDateString)
+
+    // Find today's schedule for this employee
+    const todaySchedule = await ScheduleModel.findOne({
+      assignedEmployee: employee._id,
+      date: {
+        $gte: todayDate,
+        $lt: new Date(todayDate.getTime() + 24 * 60 * 60 * 1000)
+      }
+    })
+
+    appAssert(todaySchedule, "No schedule found for today", HTTP_STATUS.NOT_FOUND)
 
     // Find today's attendance record
     let todayAttendance = employee.attendance.find(att => {
@@ -116,22 +128,42 @@ const employeeTimeActionService = async (email, password, skipBreak = false) => 
 
     if (!todayAttendance) {
       // FIRST TIME IN FOR THE DAY
-      employee.attendance.push({
+      
+      // Check if employee is late
+      const scheduledStart = todaySchedule.time.start
+      const lateMinutes = Math.max(0, (actionTime - scheduledStart) / (1000 * 60))
+      const isLate = lateMinutes > 0 // You can add a grace period (e.g., > 5 minutes)
+      
+      const newAttendance = {
         date: todayDate,
+        scheduleId: todaySchedule._id,
+        scheduledStart: scheduledStart,
+        scheduledEnd: todaySchedule.time.end,
         timeIn: actionTime,
         breakTime: 0,
-        onBreak: false
-      })
+        onBreak: false,
+        isLate: isLate,
+        lateMinutes: Math.round(lateMinutes),
+        isAbsent: false,
+        status: isLate ? "Late" : "Present"
+      }
 
+      employee.attendance.push(newAttendance)
       await employee.save()
-      logger.info(`${user.name} started work day: ${actionTime}`)
+
+      logger.info(`${user.name} started work day: ${actionTime} ${isLate ? `(Late by ${Math.round(lateMinutes)} minutes)` : ''}`)
 
       return {
         action: 'time_in',
-        message: 'Started work day successfully',
+        message: isLate 
+          ? `Started work day (Late by ${Math.round(lateMinutes)} minutes)` 
+          : 'Started work day successfully',
         nextAction: 'go_on_break',
         nextButtonText: 'Break',
-        timeIn: actionTime
+        timeIn: actionTime,
+        isLate: isLate,
+        lateMinutes: Math.round(lateMinutes),
+        scheduledStart: scheduledStart
       }
     }
 
@@ -159,8 +191,7 @@ const employeeTimeActionService = async (email, password, skipBreak = false) => 
             breakTime: todayAttendance.breakTime || 0
           }
         } else {
-
-           if (todayAttendance.breakTime) {
+          if (todayAttendance.breakTime) {
             appAssert(false, "You have already used your break for today", HTTP_STATUS.CONFLICT)
           }
 
@@ -235,22 +266,44 @@ const employeeTimeOutService = async (email, password) => {
     appAssert(!todayAttendance.timeOut, "Already timed out for today", HTTP_STATUS.BAD_REQUEST)
     appAssert(!todayAttendance.onBreak, "Cannot time out while on break", HTTP_STATUS.BAD_REQUEST)
 
-    const timeOutRecord = new Date()
-    todayAttendance.timeOut = timeOutRecord
+    const todaySchedule = await ScheduleModel.findOne({
+      assignedEmployee: employee._id,
+      date: {
+        $gte: todayDate,
+        $lt: new Date(todayDate.getTime() + 24 * 60 * 60 * 1000)
+      }
+    })
+
+    const actionTime = new Date()
+    todayAttendance.timeOut = actionTime
+
+    // Check if employee is overtime or undertime
+    const scheduledEnd = todaySchedule.time.end
+    const minutesDiff = (actionTime - scheduledEnd) / (1000 * 60)
+
+    if (minutesDiff > 5) {
+      todayAttendance.isOvertime = true
+      todayAttendance.overtimeMinutes = minutesDiff
+    } else if (minutesDiff < 5) {
+      todayAttendance.isUndertime = true
+      todayAttendance.undertimeMinutes = Math.abs(minutesDiff) 
+    }
 
     // Calculate total hours minus break time
-    const totalWorked = (timeOutRecord - todayAttendance.timeIn) / (1000 * 60 * 60)
-    todayAttendance.totalHours = Math.max(0, totalWorked - (todayAttendance.breakTime || 0))
+    const totalWorked = (actionTime - todayAttendance.timeIn) / (1000 * 60 * 60)
+    const breakHours = todayAttendance.breakTime || 0;
+    todayAttendance.totalHours = Math.max(0, totalWorked - breakHours)
+
 
     await employee.save()
-    logger.info(`${user.name} ended work day: ${timeOutRecord} (Total: ${todayAttendance.totalHours.toFixed(2)} hours, Break: ${(todayAttendance.breakTime || 0).toFixed(2)} hours)`)
+    logger.info(`${user.name} ended work day: ${actionTime} (Total: ${todayAttendance.totalHours.toFixed(2)} hours, Break: ${(todayAttendance.breakTime || 0).toFixed(2)} hours)`)
 
     return {
       action: 'time_out',
       message: 'Work day completed successfully',
       nextAction: 'none',
       nextButtonText: 'Completed',
-      timeOut: timeOutRecord,
+      timeOut: actionTime,
       totalHours: todayAttendance.totalHours,
       breakTime: todayAttendance.breakTime || 0
     }

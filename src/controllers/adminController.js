@@ -15,13 +15,15 @@ const {
   assignEmployeeToScheduleService,
   changeAssignedEmployeeService,
   fetchScheduleSlotService,
+  generateEmployeeMonthlyReportService,
 } = require('../services/adminServices')
 
 class AdminController {
   async createEmployeeAccount (req, res, next) {
     const { email, name } = req.body
+    const { departmentId } = req.params
     try {
-      const { newEmployee, message } = await createEmployeeAccountService(name, email)
+      const { newEmployee, message } = await createEmployeeAccountService(name, email, departmentId)
 
       res.status(HTTP_STATUS.CREATED).json({ newEmployee, message })
     } catch (error) {
@@ -197,6 +199,22 @@ class AdminController {
       })
     } catch (error) {
       logger.error(`Error fetching schedule slots - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async generateEmployeeMonthlyReport (req, res, next) {
+    const { year, month } = req.query
+    const { employeeId } = req.params
+    try {
+      const { report } = await generateEmployeeMonthlyReportService(employeeId, 
+        parseInt(month), 
+        parseInt(year)
+      )
+
+      res.status(HTTP_STATUS.OK).json({ report, msg: 'Generated employee monthly report succesfully' })
+    } catch (error) {
+      logger.error(`Error generating monthly report - ${error.message}`)
       next(error)
     }
   }

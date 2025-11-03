@@ -12,10 +12,14 @@ const EmailUtil = require('../utils/emailUtils')
 const validator = require('validator')
 const logger = require('../logger/logger')
 
-const createEmployeeAccountService = async (name, email) => {
+const createEmployeeAccountService = async (name, email, departmentId) => {
   try {
     appAssert(typeof name === "string", 'Invalid name, please try again', HTTP_STATUS.BAD_REQUEST)
     appAssert(validator.isEmail(email), 'Invalid email, please try again', HTTP_STATUS.BAD_REQUEST)
+    appAssert(validator.isMongoId(departmentId), 'Invalid department id, please try again', HTTP_STATUS.BAD_REQUEST)
+
+    const department = await DepartmentModel.findById(departmentId)
+    appAssert(department, 'Department is not found', HTTP_STATUS.NOT_FOUND)
 
     const existingEmployee = await UserModel.findOne({ email })
     appAssert(!existingEmployee, 'Employee email already exists', HTTP_STATUS.BAD_REQUEST)
@@ -40,9 +44,14 @@ const createEmployeeAccountService = async (name, email) => {
 
     const newEmployee = await EmployeeModel.create({
       userId: newUser._id,
+      department: department._id,
     })
 
     await newEmployee.save()
+
+    department.staffs.push(newUser._id)
+
+    await department.save()
   
     await EmailUtil.sendPasswordSetupEmail(email, token) 
 
@@ -58,6 +67,7 @@ const fetchAllActiveEmployeeService = async () => {
   try {
     const allEmployees = await EmployeeModel.find()
     .populate( "userId", "name email displayImage isActive")
+    .populate("department", "name")
 
     console.log(allEmployees)
     
@@ -67,6 +77,8 @@ const fetchAllActiveEmployeeService = async () => {
         email: emp.userId.email,
         displayImage: emp.userId.displayImage,
         isActive: emp.userId.isActive,
+        department: emp.department ? emp.department.name : "N/A",
+        leaveBalance: emp.leaveBalance,
       }))
 
       console.log(employees)
@@ -102,7 +114,7 @@ const fetchAllRequestLeaveService = async (page, pageSize) => {
     const totalPages = Math.ceil(totalRequests / pageSize)
 
     // Check if any leave requests are found
-    appAssert(allLeaveRequests.length > 0, 'No request leave found', HTTP_STATUS.NOT_FOUND)
+    appAssert(allLeaveRequests.length > 0, 'No request leave found', HTTP_STATUS.OK)
 
     // Format response
     const formattedLeaves = allLeaveRequests.map(leave => ({
@@ -271,7 +283,7 @@ const createNewDepartmentService = async (departmentName, createdBy) => {
 
 const fetchDepartmentsService = async () => {
   try {
-    const departments = await DepartmentModel.find({});
+    const departments = await DepartmentModel.find({})
 
     appAssert(departments || departments.length !== 0, 'No departments found', HTTP_STATUS.NOT_FOUND)
 
@@ -533,7 +545,8 @@ const fetchScheduleSlotService = async (month, year) => {
       }
     }
 
-    // Fetch schedule slots with populated employee and creator details
+    const startTime = Date.now()
+
     const scheduleSlots = await ScheduleModel.find(query)
       .populate({
         path: 'assignedEmployee',
@@ -543,8 +556,11 @@ const fetchScheduleSlotService = async (month, year) => {
         }
       })
       .populate('createdBy', 'name email')
-      .sort({ date: 1, 'time.start': 1 }) // Sort by date, then by start time
+      .sort({ date: 1, 'time.start': 1 })
       .lean()
+
+    const duration = Date.now() - startTime
+    logger.info(`⏱ Query executed in ${duration} ms for ${scheduleSlots.length} schedules`)
 
     appAssert(scheduleSlots && scheduleSlots.length > 0, 'No schedule slots found for this period', HTTP_STATUS.OK)
 
@@ -588,6 +604,287 @@ const fetchScheduleSlotService = async (month, year) => {
   }
 }
 
+const generateEmployeeMonthlyReportService = async (employeeId, month, year) => {
+  try {
+    // Validate inputs
+    appAssert(employeeId, "Employee ID is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(!isNaN(year) && year > 1900 && year < 3000, 'Invalid year provided', HTTP_STATUS.BAD_REQUEST)
+    appAssert(!isNaN(month) && month >= 1 && month <= 12, 'Invalid month provided', HTTP_STATUS.BAD_REQUEST)
+
+    // Find employee
+    const employee = await EmployeeModel.findById(employeeId)
+      .populate('userId', 'name email displayImage')
+      .populate('holidaysTaken.holidayId', 'name holidate type')
+    appAssert(employee, "Employee not found", HTTP_STATUS.NOT_FOUND)
+
+    // Create date range for the month
+    const startDate = new Date(year, month - 1, 1)
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999)
+
+    // Filter attendance records for the specified month
+    const monthlyAttendance = employee.attendance.filter(record => {
+      const recordDate = new Date(record.date)
+      return recordDate >= startDate && recordDate <= endDate
+    })
+
+    // Initialize counters
+    let totalPresent = 0
+    let totalLate = 0
+    let totalAbsent = 0
+    let totalLateMinutes = 0
+    let totalOvertimeMinutes = 0
+    let totalUndertimeMinutes = 0
+    let totalWorkHours = 0
+    let totalBreakHours = 0
+
+    // Detailed breakdown arrays
+    const lateRecords = []
+    const absentRecords = []
+    const overtimeRecords = []
+    const undertimeRecords = []
+    const presentRecords = []
+
+    // Process each attendance record
+    monthlyAttendance.forEach(record => {
+      // Count by status
+      if (record.status === "Present") totalPresent++
+      else if (record.status === "Late") {
+        totalPresent++
+        totalLate++
+        totalLateMinutes += record.lateMinutes || 0
+        lateRecords.push({
+          date: record.date,
+          scheduledStart: new Date(record.scheduledStart).toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+          }),
+          actualTimeIn: record.timeIn,
+          lateMinutes: record.lateMinutes
+        })
+      }
+      else if (record.status === "Absent") {
+        totalAbsent++
+        absentRecords.push({
+          date: record.date,
+          scheduledStart: record.scheduledStart,
+          scheduledEnd: record.scheduledEnd
+        })
+      }
+
+      // Accumulate work hours and break time
+      totalWorkHours += record.totalHours || 0
+      totalBreakHours += record.breakTime || 0
+
+      // Track overtime
+      if (record.isOvertime) {
+        totalOvertimeMinutes += record.overtimeMinutes || 0
+        overtimeRecords.push({
+          date: record.date,
+          scheduledEnd: record.scheduledEnd,
+          actualTimeOut: record.timeOut,
+          overtimeMinutes: record.overtimeMinutes
+        })
+      }
+
+      // Track undertime
+      if (record.isUndertime) {
+        totalUndertimeMinutes += record.undertimeMinutes || 0
+        undertimeRecords.push({
+          date: record.date,
+          scheduledEnd: record.scheduledEnd,
+          actualTimeOut: record.timeOut,
+          undertimeMinutes: record.undertimeMinutes
+        })
+      }
+
+      // Track present records
+      if (record.timeIn && record.timeOut && !record.isAbsent) {
+        presentRecords.push({
+          date: record.date,
+          timeIn: record.timeIn,
+          timeOut: record.timeOut,
+          totalHours: record.totalHours,
+          breakTime: record.breakTime
+        })
+      }
+    })
+
+    // Get approved leaves for the month from Leave collection
+    const approvedLeaves = await LeaveModel.find({
+      employee: employee.userId._id,
+      status: "APPROVED",
+      $or: [
+        {
+          startDate: { $gte: startDate, $lte: endDate }
+        },
+        {
+          endDate: { $gte: startDate, $lte: endDate }
+        },
+        {
+          startDate: { $lte: startDate },
+          endDate: { $gte: endDate }
+        }
+      ]
+    }).populate('approvedBy', 'name email')
+
+    // Calculate total leave days taken in this month
+    let totalLeaveDaysTaken = 0
+    let sickLeaveDaysTaken = 0
+    let vacationLeaveDaysTaken = 0
+
+    const leaveDetails = approvedLeaves.map(leave => {
+      const leaveStart = new Date(Math.max(leave.startDate, startDate))
+      const leaveEnd = new Date(Math.min(leave.endDate, endDate))
+      const daysInMonth = Math.floor((leaveEnd - leaveStart) / (1000 * 60 * 60 * 24)) + 1
+      
+      totalLeaveDaysTaken += daysInMonth
+
+      // Track by leave category
+      if (leave.leaveCategory === 'sickLeave') {
+        sickLeaveDaysTaken += daysInMonth
+      } else if (leave.leaveCategory === 'vacationLeave') {
+        vacationLeaveDaysTaken += daysInMonth
+      }
+
+      return {
+        leaveType: leave.leaveType,
+        leaveCategory: leave.leaveCategory,
+        startDate: leave.startDate,
+        endDate: leave.endDate,
+        daysInMonth,
+        totalDays: leave.numberOfDays,
+        daysApproved: leave.daysApproved,
+        reason: leave.reason,
+        approvedBy: leave.approvedBy ? {
+          id: leave.approvedBy._id,
+          name: leave.approvedBy.name,
+          email: leave.approvedBy.email
+        } : null,
+        createdAt: leave.createdAt
+      }
+    })
+
+    // Get holidays taken in this month
+    const holidaysTakenInMonth = employee.holidaysTaken.filter(holiday => {
+      if (!holiday.holidayId) return false
+      const holidayDate = new Date(holiday.holidayId.holidate)
+      return holidayDate >= startDate && holidayDate <= endDate
+    }).map(holiday => ({
+      name: holiday.holidayId.name,
+      date: holiday.holidayId.holidate,
+      type: holiday.holidayId.type,
+    }))
+
+    // Get scheduled days for the month
+    const scheduledDays = await ScheduleModel.countDocuments({
+      assignedEmployee: employeeId,
+      date: { $gte: startDate, $lte: endDate }
+    })
+
+    // Calculate working days (scheduled days - leaves - holidays)
+    const expectedWorkingDays = scheduledDays - totalLeaveDaysTaken - holidaysTakenInMonth.filter(h => h.status === "Approved").length
+
+    // Calculate attendance rate
+    const attendanceRate = expectedWorkingDays > 0 
+      ? ((totalPresent + totalLate) / expectedWorkingDays * 100).toFixed(2)
+      : 0
+
+    // Calculate punctuality rate (on-time arrivals)
+    const punctualityRate = (totalPresent + totalLate) > 0
+      ? (totalPresent / (totalPresent + totalLate) * 100).toFixed(2)
+      : 0
+
+    // Get current leave balances
+    const leaveBalances = {
+      sickLeave: {
+        beginning: employee.leaveBalance?.sickLeave?.beginning || 0,
+        availments: employee.leaveBalance?.sickLeave?.availments || 0,
+        remaining: employee.leaveBalance?.sickLeave?.remaining || 0,
+        active: employee.leaveBalance?.sickLeave?.active || 0,
+        reserved: employee.leaveBalance?.sickLeave?.reserved || 0
+      },
+      vacationLeave: {
+        beginning: employee.leaveBalance?.vacationLeave?.beginning || 0,
+        availments: employee.leaveBalance?.vacationLeave?.availments || 0,
+        remaining: employee.leaveBalance?.vacationLeave?.remaining || 0,
+        active: employee.leaveBalance?.vacationLeave?.active || 0,
+        reserved: employee.leaveBalance?.vacationLeave?.reserved || 0
+      }
+    }
+
+    // Build comprehensive report
+    const report = {
+      employee: {
+        id: employee._id,
+        name: employee.userId.name,
+        email: employee.userId.email,
+        displayImage: employee.userId.displayImage
+      },
+      period: {
+        month,
+        year,
+        startDate,
+        endDate,
+        monthName: new Date(year, month - 1).toLocaleString('default', { month: 'long' })
+      },
+      summary: {
+        scheduledDays,
+        expectedWorkingDays,
+        totalPresent,
+        totalLate,
+        totalAbsent,
+        attendanceRate: `${attendanceRate}%`,
+        punctualityRate: `${punctualityRate}%`
+      },
+      timeTracking: {
+        totalWorkHours: totalWorkHours.toFixed(2),
+        totalBreakHours: totalBreakHours.toFixed(2),
+        totalLateMinutes,
+        totalLateHours: (totalLateMinutes / 60).toFixed(2),
+        totalOvertimeMinutes,
+        totalOvertimeHours: (totalOvertimeMinutes / 60).toFixed(2),
+        totalUndertimeMinutes,
+        totalUndertimeHours: (totalUndertimeMinutes / 60).toFixed(2),
+        averageWorkHoursPerDay: monthlyAttendance.length > 0 
+          ? (totalWorkHours / monthlyAttendance.length).toFixed(2)
+          : 0
+      },
+      detailedRecords: {
+        lateRecords: lateRecords.sort((a, b) => new Date(b.date) - new Date(a.date)),
+        absentRecords: absentRecords.sort((a, b) => new Date(b.date) - new Date(a.date)),
+        overtimeRecords: overtimeRecords.sort((a, b) => new Date(b.date) - new Date(a.date)),
+        undertimeRecords: undertimeRecords.sort((a, b) => new Date(b.date) - new Date(a.date)),
+        presentRecords: presentRecords.sort((a, b) => new Date(b.date) - new Date(a.date))
+      },
+      leaves: {
+        totalDaysTaken: totalLeaveDaysTaken,
+        sickLeaveDaysTaken,
+        vacationLeaveDaysTaken,
+        approvedLeavesCount: approvedLeaves.length,
+        approvedLeaves: leaveDetails,
+        currentBalances: leaveBalances
+      },
+      holidays: {
+        totalTaken: holidaysTakenInMonth.length,
+        details: holidaysTakenInMonth
+      },
+      generatedAt: new Date(),
+      generatedBy: "System"
+    }
+
+    logger.info(`Monthly report generated for employee ${employee.userId.name} (${month}/${year})`)
+
+    return {
+      report,
+      message: "Monthly report generated successfully"
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
 module.exports = {
   createEmployeeAccountService,
   fetchAllActiveEmployeeService,
@@ -603,4 +900,5 @@ module.exports = {
   assignEmployeeToScheduleService,
   changeAssignedEmployeeService,
   fetchScheduleSlotService,
+  generateEmployeeMonthlyReportService,
 }

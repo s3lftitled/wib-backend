@@ -39,7 +39,7 @@ const UserSchema = new mongoose.Schema({
   },
   tokenExpires: {
     type: Date
-  }
+  },
 })
 
 module.exports = mongoose.model("User", UserSchema)

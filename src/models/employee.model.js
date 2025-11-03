@@ -2,28 +2,26 @@ const mongoose = require("mongoose")
 const ROLE_CONSTANTS = require("../constants/roleConstants")
 
 const employeeLeaveSchema = new mongoose.Schema({
-  beginning: { type: Number, default: 0 },  // Starting balance
-  availments: { type: Number, default: 0 }, // Taken
-  remaining: { type: Number, default: 0 },  // Left
-  active: { type: Number, default: 0 },     // Currently active
-  reserved: { type: Number, default: 0 },   // Reserved
-}, { _id: false }); // Disable _id for subdocument
+  beginning: { type: Number, default: 0 },
+  availments: { type: Number, default: 0 },
+  remaining: { type: Number, default: 0 },
+  active: { type: Number, default: 0 },
+  reserved: { type: Number, default: 0 },
+}, { _id: false });
 
 const EmployeeSchema = new mongoose.Schema({
   userId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: "User",   // links to Users collection
+    ref: "User",
     required: true 
   },
 
-  // Fixed role
   role: { 
     type: String, 
     default: ROLE_CONSTANTS[101], 
     immutable: true 
   },
 
-  // Holidays requested by the employee
   holidaysTaken: [
     {
       holidayId: { type: mongoose.Schema.Types.ObjectId, ref: "Holiday" },
@@ -36,23 +34,42 @@ const EmployeeSchema = new mongoose.Schema({
     }
   ],
 
-  // Attendance records
+  // Updated attendance with late/absent tracking
   attendance: [
     {
-      date: { type: Date, default: Date.now }, // calendar day
-      timeIn: { type: Date },   // full Date (day + time)  
-      timeOut: { type: Date },  // full Date (day + time)
-      breakTime: { type: Number, default: 0 }, // total break time in hours
-      totalHours: { type: Number, default: 0 }, // final calculated work hours
-      onBreak: { type: Boolean, default: false }, // currently on break status
-      breakStart: { type: Date } // when current break started
+      date: { type: Date, default: Date.now },
+      scheduleId: { type: mongoose.Schema.Types.ObjectId, ref: "Schedule" }, 
+      scheduledStart: { type: Date },
+      scheduledEnd: { type: Date },  
+      timeIn: { type: Date },
+      timeOut: { type: Date },
+      breakTime: { type: Number, default: 0 },
+      totalHours: { type: Number, default: 0 },
+      onBreak: { type: Boolean, default: false },
+      breakStart: { type: Date },
+      isLate: { type: Boolean, default: false }, 
+      lateMinutes: { type: Number, default: 0 }, 
+      isAbsent: { type: Boolean, default: false }, 
+      isOvertime: { type: Boolean, default: false },
+      overtimeMinutes: { type: Number, default: 0 },
+      isUndertime: { type: Boolean, default: false },
+      undertimeMinutes: { type: Number, default: 0 },
+      status: { 
+        type: String, 
+        enum: ["Present", "Late", "Absent", "OnLeave"],
+        default: "Present" 
+      }
     }
   ],
-  // Leave balances by type
+
   leaveBalance: {
     sickLeave: { type: employeeLeaveSchema, default: () => ({}) },
     vacationLeave: { type: employeeLeaveSchema, default: () => ({}) }
   },
+  department: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department'
+  }
 })
 
 module.exports = mongoose.model("Employee", EmployeeSchema)
