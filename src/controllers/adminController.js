@@ -16,6 +16,11 @@ const {
   changeAssignedEmployeeService,
   fetchScheduleSlotService,
   generateEmployeeMonthlyReportService,
+  fetchAllOvertimeRecordsService,
+  approveOvertimeRecordService,
+  declineOvertimeRecordService,
+  getOvertimeStatisticsService,
+  editEmployeeLeaveBalanceService,
 } = require('../services/adminServices')
 
 class AdminController {
@@ -215,6 +220,107 @@ class AdminController {
       res.status(HTTP_STATUS.OK).json({ report, msg: 'Generated employee monthly report succesfully' })
     } catch (error) {
       logger.error(`Error generating monthly report - ${error.message}`)
+      next(error)
+    }
+  }
+
+  /**
+   * Fetch all overtime/undertime records with pagination and filters
+   */
+  async fetchAllOvertimeRecords(req, res, next) {
+    try {
+      const { page = 1, pageSize = 10, status = null, type = null } = req.query
+
+      const { records, pagination, message } = await fetchAllOvertimeRecordsService(
+        parseInt(page),
+        parseInt(pageSize),
+        status,
+        type
+      )
+
+      res.status(HTTP_STATUS.OK).json({ records, pagination, message })
+    } catch (error) {
+      logger.error(`Error fetching overtime records - ${error.message}`)
+      next(error)
+    }
+  }
+
+  /**
+   * Approve an overtime/undertime record
+   */
+  async approveOvertimeRecord(req, res, next) {
+    const { recordId, reviewedBy } = req.params
+    const { reviewNotes } = req.body
+
+    try {
+      const { record, message } = await approveOvertimeRecordService(
+        recordId,
+        reviewedBy,
+        reviewNotes
+      )
+
+      res.status(HTTP_STATUS.OK).json({ record, message })
+    } catch (error) {
+      logger.error(`Error approving overtime record - ${error.message}`)
+      next(error)
+    }
+  }
+
+  /**
+   * Decline an overtime/undertime record
+   */
+  async declineOvertimeRecord(req, res, next) {
+    const { recordId, reviewedBy } = req.params
+    const { reviewNotes } = req.body
+
+    try {
+      const { record, message } = await declineOvertimeRecordService(
+        recordId,
+        reviewedBy,
+        reviewNotes
+      )
+
+      res.status(HTTP_STATUS.OK).json({ record, message })
+    } catch (error) {
+      logger.error(`Error declining overtime record - ${error.message}`)
+      next(error)
+    }
+  }
+
+  /**
+   * Get overtime/undertime statistics for dashboard
+   */
+  async getOvertimeStatistics(req, res, next) {
+    try {
+      const { startDate = null, endDate = null } = req.query
+
+      const { statistics, message } = await getOvertimeStatisticsService(
+        startDate,
+        endDate
+      )
+
+      res.status(HTTP_STATUS.OK).json({ statistics, message })
+    } catch (error) {
+      logger.error(`Error fetching overtime statistics - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async editEmployeeLeaveBalance(req, res, next) {
+    const { employeeId, adminUserId } = req.params
+    const { leaveType, beginningBalance } = req.body
+    
+    try {
+      const result = await editEmployeeLeaveBalanceService(
+        employeeId,
+        leaveType,
+        beginningBalance,
+        adminUserId
+      )
+
+      res.status(HTTP_STATUS.OK).json(result)
+    } catch (error) {
+      logger.error(`Error editing employee leave balance - ${error.message}`)
       next(error)
     }
   }

@@ -9,6 +9,7 @@ const connectWithRetry = require('./src/config/connectDB')  // Function to conne
 const logger = require('./src/logger/logger')         // Custom logger for logging info and errors
 const errorHandler = require('./src/middlewares/errorHandler') // Global error handler middleware
 const { setupSwagger } = require('./src/config/swagger')
+const { setupAbsenceMarkerCron, manualTriggerAbsenceMarker } = require('./src/cron/markAbsences.cron')
 
 // Import route modules
 const authRouter = require('./src/routers/authRouter')
@@ -53,6 +54,15 @@ app.get('/health-check', (req, res) => {
   res.send('server is healthy!!')
 })
 
+app.post('/api/admin/trigger-absence-marker', async (req, res) => {
+  try {
+    const result = await manualTriggerAbsenceMarker()
+    res.json({ success: true, result })
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
 // Authentication base routes
 app.use('/api/auth', authRouter)
 
@@ -77,13 +87,16 @@ const start = async () => {
     // Attempt to connect to MongoDB
     await connectWithRetry()
 
+    setupAbsenceMarkerCron()
+    logger.info('Absence marker cron job initialized')
+
     // Start the Express server after DB connection is successful
     app.listen(port, () => {
-      logger.info(` ✅ Server is now listening in port ${port}`)
+      logger.info(`Server is now listening in port ${port}`)
     })
   } catch (error) {
     // Log any error encountered during startup
-     logger.logError(`🚫 Error starting server ${error.message}`)
+     logger.logError(`Error starting server ${error.message}`)
   }
 }
 

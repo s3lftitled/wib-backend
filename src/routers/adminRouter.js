@@ -423,4 +423,246 @@ router.get('/v1/fetch-schedule-slots', AdminController.fetchScheduleSlots)
  */
 router.get('/v1/generate-employee-monthly-report/:employeeId', AdminController.generateEmployeeMonthlyReport)
 
+/**
+ * @swagger
+ * tags:
+ *   name: Admin Overtime
+ *   description: Admin overtime and undertime management
+ */
+
+/**
+ * @swagger
+ * /api/admin/v1/overtime/fetch-records:
+ *   get:
+ *     summary: Fetch all overtime/undertime records with filters
+ *     tags: [Admin Overtime]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           example: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           example: 10
+ *         description: Number of records per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Pending, Approved, Declined, all]
+ *           example: Pending
+ *         description: Filter by status
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [Overtime, Undertime, all]
+ *           example: Overtime
+ *         description: Filter by type
+ *     responses:
+ *       200:
+ *         description: List of overtime/undertime records
+ *       400:
+ *         description: Invalid pagination or filter values
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/v1/overtime/fetch-records', AdminController.fetchAllOvertimeRecords)
+
+/**
+ * @swagger
+ * /api/admin/v1/overtime/approve/{recordId}/{reviewedBy}:
+ *   put:
+ *     summary: Approve an overtime/undertime record
+ *     tags: [Admin Overtime]
+ *     parameters:
+ *       - in: path
+ *         name: recordId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Overtime record ID
+ *       - in: path
+ *         name: reviewedBy
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Admin user ID who is approving
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reviewNotes:
+ *                 type: string
+ *                 example: Verified with project manager
+ *                 description: Optional notes about the approval
+ *     responses:
+ *       200:
+ *         description: Overtime record approved successfully
+ *       400:
+ *         description: Record already reviewed or invalid input
+ *       403:
+ *         description: Only admins can review overtime records
+ *       404:
+ *         description: Record or reviewer not found
+ *       500:
+ *         description: Internal server error
+ */
+router.put('/v1/overtime/approve/:recordId/:reviewedBy', AdminController.approveOvertimeRecord)
+
+/**
+ * @swagger
+ * /api/admin/v1/overtime/decline/{recordId}/{reviewedBy}:
+ *   put:
+ *     summary: Decline an overtime/undertime record
+ *     tags: [Admin Overtime]
+ *     parameters:
+ *       - in: path
+ *         name: recordId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Overtime record ID
+ *       - in: path
+ *         name: reviewedBy
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Admin user ID who is declining
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - reviewNotes
+ *             properties:
+ *               reviewNotes:
+ *                 type: string
+ *                 example: No prior approval from supervisor
+ *                 description: Required reason for declining
+ *     responses:
+ *       200:
+ *         description: Overtime record declined successfully
+ *       400:
+ *         description: Record already reviewed, review notes required, or invalid input
+ *       403:
+ *         description: Only admins can review overtime records
+ *       404:
+ *         description: Record or reviewer not found
+ *       500:
+ *         description: Internal server error
+ */
+router.put('/v1/overtime/decline/:recordId/:reviewedBy', AdminController.declineOvertimeRecord)
+
+/**
+ * @swagger
+ * /api/admin/v1/overtime/statistics:
+ *   get:
+ *     summary: Get overtime/undertime statistics
+ *     tags: [Admin Overtime]
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *           example: 2025-01-01
+ *         description: Filter statistics from this date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *           example: 2025-01-31
+ *         description: Filter statistics until this date
+ *     responses:
+ *       200:
+ *         description: Overtime statistics retrieved successfully
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/v1/overtime/statistics', AdminController.getOvertimeStatistics)
+
+/**
+ * @swagger
+ * /api/admin/v1/edit-leave-balance/{employeeId}/{adminUserId}:
+ *   put:
+ *     summary: Edit employee leave balance (beginning balance only)
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: path
+ *         name: employeeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Employee ID whose leave balance will be updated
+ *       - in: path
+ *         name: adminUserId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Admin user ID making the change
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - leaveType
+ *               - beginningBalance
+ *             properties:
+ *               leaveType:
+ *                 type: string
+ *                 enum: [sickLeave, vacationLeave]
+ *                 example: sickLeave
+ *                 description: Type of leave to update
+ *               beginningBalance:
+ *                 type: number
+ *                 example: 15
+ *                 description: New beginning balance (must be >= current availments)
+ *     responses:
+ *       200:
+ *         description: Leave balance updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 employee:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                 leaveType:
+ *                   type: string
+ *                 previousBalance:
+ *                   type: object
+ *                 updatedBalance:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid input or beginning balance less than availments
+ *       403:
+ *         description: Only admins can edit leave balances
+ *       404:
+ *         description: Employee or admin not found
+ *       500:
+ *         description: Internal server error
+ */
+router.put('/v1/edit-leave-balance/:employeeId/:adminUserId', AdminController.editEmployeeLeaveBalance)
+
 module.exports = router

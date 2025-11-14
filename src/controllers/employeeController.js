@@ -8,6 +8,7 @@ const {
   getMonthlyAttendanceService,
   requestLeaveService,
   activateAccountService,
+  submitOvertimeReasonService,
 } = require('../services/employeeServices')
 
 class EmployeeController {
@@ -111,6 +112,18 @@ class EmployeeController {
       res.status(HTTP_STATUS.OK).json({ message })
     } catch (error) {
       logger.error('Error activating account:', error)
+      next(error)
+    }
+  }
+
+  async submitOvertimeReason (req, res, next) {
+    const { email, password, reason, type} = req.body
+    try {
+      const{ message } = await submitOvertimeReasonService(email, password, reason, type)
+
+      res.status(HTTP_STATUS.OK).json({ message })
+    } catch (error) {
+      logger.error('Error submitting reason:', error)
       next(error)
     }
   }

@@ -31,7 +31,7 @@ const LeaveSchema = new mongoose.Schema({
   },
   leaveCategory: {
     type: String,
-    enum: ["sickLeave", "vacationLeave"], // must match user.leaveBalance keys
+    enum: ["sickLeave", "vacationLeave"], 
     required: true
   },
 

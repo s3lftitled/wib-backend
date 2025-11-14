@@ -62,6 +62,49 @@ const EmployeeSchema = new mongoose.Schema({
     }
   ],
 
+  // NEW: Attendance History - logs all attendance actions
+  attendanceHistory: [
+    {
+      action: {
+        type: String,
+        enum: [
+          "time_in",
+          "go_on_break", 
+          "back_from_break",
+          "time_out",
+          "skip_break_time_out"
+        ],
+        required: true
+      },
+      timestamp: {
+        type: Date,
+        default: Date.now,
+        required: true
+      },
+      attendanceDate: {
+        type: Date,
+        required: true
+      },
+      details: {
+        isLate: { type: Boolean },
+        lateMinutes: { type: Number },
+        gracePeriodUsed: { type: Boolean },
+        remainingGracePeriods: { type: Number },
+        breakDuration: { type: Number },
+        totalBreakTime: { type: Number },
+        totalHours: { type: Number },
+        isOvertime: { type: Boolean },
+        overtimeMinutes: { type: Number },
+        isUndertime: { type: Boolean },
+        undertimeMinutes: { type: Number },
+        scheduledStart: { type: Date },
+        scheduledEnd: { type: Date }
+      },
+      ipAddress: { type: String },
+      userAgent: { type: String }
+    }
+  ],
+
   leaveBalance: {
     sickLeave: { type: employeeLeaveSchema, default: () => ({}) },
     vacationLeave: { type: employeeLeaveSchema, default: () => ({}) }
@@ -69,7 +112,11 @@ const EmployeeSchema = new mongoose.Schema({
   department: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Department'
-  }
+  },
+  lateGracePeriodCount: {
+    type: Number,
+    default: 3
+  },
 })
 
 module.exports = mongoose.model("Employee", EmployeeSchema)

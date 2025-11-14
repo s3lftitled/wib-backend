@@ -4,6 +4,7 @@ const LeaveModel = require('../models/leave.model')
 const DepartmentModel = require('../models/department.model')
 const HolidayModel = require('../models/holiday.model')
 const ScheduleModel = require('../models/schedule.model')
+const OvertimeRecordModel = require('../models/overtimerecords.model')
 const HTTP_STATUS = require('../constants/httpConstants')
 const ROLE_CONSTANTS = require('../constants/roleConstants')
 const { appAssert } = require('../utils/appAssert')
@@ -66,33 +67,37 @@ const createEmployeeAccountService = async (name, email, departmentId) => {
 const fetchAllActiveEmployeeService = async () => {
   try {
     const allEmployees = await EmployeeModel.find()
-    .populate( "userId", "name email displayImage isActive")
-    .populate("department", "name")
+      .populate("userId", "name email displayImage isActive")
+      .populate("department", "name")
 
     console.log(allEmployees)
     
     const employees = allEmployees.map(emp => ({
-        id: emp._id,
-        name: emp.userId.name,
-        email: emp.userId.email,
-        displayImage: emp.userId.displayImage,
-        isActive: emp.userId.isActive,
-        department: emp.department ? emp.department.name : "N/A",
-        leaveBalance: emp.leaveBalance,
-      }))
-
-      console.log(employees)
+      id: emp._id,
+      name: emp.userId.name,
+      email: emp.userId.email,
+      displayImage: emp.userId.displayImage,
+      isActive: emp.userId.isActive,
+      department: emp.department ? emp.department.name : "N/A",
+      leaveBalance: emp.leaveBalance,
+      attendanceHistory: emp.attendanceHistory.map(history => ({
+        action: history.action,
+        timestamp: history.timestamp,
+        attendanceDate: history.attendanceDate,
+        details: history.details,
+        ipAddress: history.ipAddress,
+        userAgent: history.userAgent
+      })).sort((a, b) => b.timestamp - a.timestamp) // Sort by most recent first
+    }))
 
     appAssert(employees.length > 0, 'No active employees found', HTTP_STATUS.NOT_FOUND)
 
-    return { employees, message: 'Succesfully fetched all employees'}
+    return { employees, message: 'Successfully fetched all employees'}
   } catch (error) {
     throw error
   }
 }
 
-// Fetch request leaves service
-// Fetch request leaves service
 const fetchAllRequestLeaveService = async (page, pageSize) => {
   try {
     // Validate that page and pageSize are positive integers
@@ -152,7 +157,6 @@ const fetchAllRequestLeaveService = async (page, pageSize) => {
   }
 }
 
-
 const approveLeaveRequestService = async (leaveId, approvedBy, leaveCategory) => {
   try {
     // Find leave request
@@ -163,8 +167,8 @@ const approveLeaveRequestService = async (leaveId, approvedBy, leaveCategory) =>
     appAssert(leaveRequest.status === "PENDING", "Leave request already processed", HTTP_STATUS.BAD_REQUEST)
 
     // Find the user
-    const user = await UserModel.findById(leaveRequest.employee)
-    appAssert(user, "User not found", HTTP_STATUS.NOT_FOUND)
+    const employee = await EmployeeModel.findOne({ userId: leaveRequest.employee })
+    appAssert(employee, "User not found", HTTP_STATUS.NOT_FOUND)
 
     // Calculate total days
     const start = new Date(leaveRequest.startDate)
@@ -172,9 +176,9 @@ const approveLeaveRequestService = async (leaveId, approvedBy, leaveCategory) =>
     const days = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
 
     // Ensure leave balance exists
-    appAssert(user.leaveBalance && user.leaveBalance[leaveCategory], "Invalid leave category", HTTP_STATUS.BAD_REQUEST)
+    appAssert(employee.leaveBalance && employee.leaveBalance[leaveCategory], "Invalid leave category", HTTP_STATUS.BAD_REQUEST)
 
-    const leaveData = user.leaveBalance[leaveCategory]
+    const leaveData = employee.leaveBalance[leaveCategory]
 
     // Ensure enough remaining
     appAssert(leaveData.remaining >= days, "Not enough leave balance", HTTP_STATUS.BAD_REQUEST)
@@ -185,7 +189,7 @@ const approveLeaveRequestService = async (leaveId, approvedBy, leaveCategory) =>
     leaveData.active += days
 
     // Save changes
-    await user.save()
+    await employee.save()
 
     // Update leave request status
     leaveRequest.status = "APPROVED"
@@ -193,7 +197,7 @@ const approveLeaveRequestService = async (leaveId, approvedBy, leaveCategory) =>
     leaveRequest.daysApproved = days
     await leaveRequest.save()
 
-    logger.info(`Leave request ${leaveId} approved for ${user.name}`)
+    logger.info(`Leave request ${leaveId} approved for ${employee.name}`)
 
     return { leaveRequest, message: "Leave request approved successfully" }
   } catch (error) {
@@ -676,28 +680,6 @@ const generateEmployeeMonthlyReportService = async (employeeId, month, year) => 
       totalWorkHours += record.totalHours || 0
       totalBreakHours += record.breakTime || 0
 
-      // Track overtime
-      if (record.isOvertime) {
-        totalOvertimeMinutes += record.overtimeMinutes || 0
-        overtimeRecords.push({
-          date: record.date,
-          scheduledEnd: record.scheduledEnd,
-          actualTimeOut: record.timeOut,
-          overtimeMinutes: record.overtimeMinutes
-        })
-      }
-
-      // Track undertime
-      if (record.isUndertime) {
-        totalUndertimeMinutes += record.undertimeMinutes || 0
-        undertimeRecords.push({
-          date: record.date,
-          scheduledEnd: record.scheduledEnd,
-          actualTimeOut: record.timeOut,
-          undertimeMinutes: record.undertimeMinutes
-        })
-      }
-
       // Track present records
       if (record.timeIn && record.timeOut && !record.isAbsent) {
         presentRecords.push({
@@ -708,6 +690,60 @@ const generateEmployeeMonthlyReportService = async (employeeId, month, year) => 
           breakTime: record.breakTime
         })
       }
+    })
+
+    // Get APPROVED overtime records from OvertimeRecord collection
+    const approvedOvertimeRecords = await OvertimeRecordModel.find({
+      employeeId: employeeId,
+      type: "Overtime",
+      status: "Approved",
+      date: { $gte: startDate, $lte: endDate }
+    }).populate('reviewedBy', 'name email')
+
+    // Process approved overtime records
+    approvedOvertimeRecords.forEach(overtimeRecord => {
+      totalOvertimeMinutes += overtimeRecord.minutes
+      overtimeRecords.push({
+        date: overtimeRecord.date,
+        scheduledEnd: overtimeRecord.scheduledEnd,
+        actualTimeOut: overtimeRecord.actualTimeOut,
+        overtimeMinutes: overtimeRecord.minutes,
+        reason: overtimeRecord.reason,
+        reviewedBy: overtimeRecord.reviewedBy ? {
+          id: overtimeRecord.reviewedBy._id,
+          name: overtimeRecord.reviewedBy.name,
+          email: overtimeRecord.reviewedBy.email
+        } : null,
+        reviewedAt: overtimeRecord.reviewedAt,
+        reviewNotes: overtimeRecord.reviewNotes
+      })
+    })
+
+    // Get APPROVED undertime records from OvertimeRecord collection
+    const approvedUndertimeRecords = await OvertimeRecordModel.find({
+      employeeId: employeeId,
+      type: "Undertime",
+      status: "Approved",
+      date: { $gte: startDate, $lte: endDate }
+    }).populate('reviewedBy', 'name email')
+
+    // Process approved undertime records
+    approvedUndertimeRecords.forEach(undertimeRecord => {
+      totalUndertimeMinutes += undertimeRecord.minutes
+      undertimeRecords.push({
+        date: undertimeRecord.date,
+        scheduledEnd: undertimeRecord.scheduledEnd,
+        actualTimeOut: undertimeRecord.actualTimeOut,
+        undertimeMinutes: undertimeRecord.minutes,
+        reason: undertimeRecord.reason,
+        reviewedBy: undertimeRecord.reviewedBy ? {
+          id: undertimeRecord.reviewedBy._id,
+          name: undertimeRecord.reviewedBy.name,
+          email: undertimeRecord.reviewedBy.email
+        } : null,
+        reviewedAt: undertimeRecord.reviewedAt,
+        reviewNotes: undertimeRecord.reviewNotes
+      })
     })
 
     // Get approved leaves for the month from Leave collection
@@ -885,6 +921,423 @@ const generateEmployeeMonthlyReportService = async (employeeId, month, year) => 
   }
 }
 
+const addNewAdmin = async (name, email) => {
+
+  try {
+    // Basic type check
+    appAssert(typeof name === "string", 'Invalid name', HTTP_STATUS.BAD_REQUEST)
+    appAssert(typeof email === "string", 'Invalid email', HTTP_STATUS.BAD_REQUEST)
+
+    // Trim and sanitize
+    name = validator.escape(name.trim())
+    email = validator.normalizeEmail(email)
+
+    // Validate name length and pattern
+    appAssert(name.length >= 2 && name.length <= 50, 'Name must be between 2 and 50 characters', HTTP_STATUS.BAD_REQUEST)
+    appAssert(/^[A-Za-z\s]+$/.test(name), 'Name should only contain letters and spaces', HTTP_STATUS.BAD_REQUEST)
+
+    // Validate email format
+    appAssert(validator.isEmail(email), 'Invalid email format', HTTP_STATUS.BAD_REQUEST)
+
+    // Check for duplicates
+    const existingUser = await UserModel.findOne({ email })
+    appAssert(!existingUser, 'Email is already registered', HTTP_STATUS.CONFLICT)
+
+    const hashedPassword = await PasswordUtil.createTempPassword()
+    const token = EmailUtil.generateToken()
+
+    // Set token expiration (4 hours from now)
+    const tokenExpiration = new Date()
+    tokenExpiration.setHours(tokenExpiration.getHours() + 4)
+
+    const newAdmin = await UserModel.create({
+      email,
+      name,
+      role: ROLE_CONSTANTS[202],
+      token: token,
+      tokenExpires: tokenExpiration,
+    })
+
+    await newAdmin.save()
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * Fetch all overtime/undertime records with pagination and filters
+ */
+const fetchAllOvertimeRecordsService = async (page = 1, pageSize = 10, status = null, type = null) => {
+  try {
+    // Validate pagination
+    appAssert(page > 0 && pageSize > 0, 'Page and pageSize must be positive integers', HTTP_STATUS.BAD_REQUEST)
+
+    // Build query filter
+    const query = {}
+    
+    if (status && status !== 'all') {
+      appAssert(['Pending', 'Approved', 'Declined'].includes(status), 'Invalid status', HTTP_STATUS.BAD_REQUEST)
+      query.status = status
+    }
+    
+    if (type && type !== 'all') {
+      appAssert(['Overtime', 'Undertime'].includes(type), 'Invalid type', HTTP_STATUS.BAD_REQUEST)
+      query.type = type
+    }
+
+    // Calculate skip
+    const skip = (page - 1) * pageSize
+
+    // Fetch records with pagination
+    const overtimeRecords = await OvertimeRecordModel.find(query)
+      .populate({
+        path: 'employeeId',
+        populate: {
+          path: 'userId',
+          select: 'name email displayImage'
+        }
+      })
+      .populate('reviewedBy', 'name email')
+      .sort({ submittedAt: -1 })
+      .skip(skip)
+      .limit(pageSize)
+
+    // Count total records
+    const totalRecords = await OvertimeRecordModel.countDocuments(query)
+    const totalPages = Math.ceil(totalRecords / pageSize)
+
+    // Format response
+    const formattedRecords = overtimeRecords.map(record => ({
+      id: record._id,
+      employeeName: record.employeeId?.userId?.name || "Unknown",
+      employeeEmail: record.employeeId?.userId?.email || "Unknown",
+      employeeImage: record.employeeId?.userId?.displayImage || null,
+      type: record.type,
+      date: record.date,
+      scheduledEnd: record.scheduledEnd,
+      actualTimeOut: record.actualTimeOut,
+      minutes: record.minutes,
+      reason: record.reason,
+      status: record.status,
+      submittedAt: record.submittedAt,
+      reviewedBy: record.reviewedBy ? {
+        id: record.reviewedBy._id,
+        name: record.reviewedBy.name,
+        email: record.reviewedBy.email
+      } : null,
+      reviewedAt: record.reviewedAt,
+      reviewNotes: record.reviewNotes
+    }))
+
+    return {
+      records: formattedRecords,
+      pagination: {
+        currentPage: page,
+        pageSize,
+        totalPages,
+        totalRecords
+      },
+      message: "Overtime records fetched successfully"
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * Approve overtime/undertime record
+ */
+const approveOvertimeRecordService = async (recordId, reviewedBy, reviewNotes = null) => {
+  try {
+    // Validate inputs
+    appAssert(recordId, "Record ID is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(reviewedBy, "Reviewer ID is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(validator.isMongoId(recordId), "Invalid record ID", HTTP_STATUS.BAD_REQUEST)
+    appAssert(validator.isMongoId(reviewedBy), "Invalid reviewer ID", HTTP_STATUS.BAD_REQUEST)
+
+    // Find the reviewer (admin)
+    const admin = await UserModel.findById(reviewedBy)
+    appAssert(admin, "Reviewer not found", HTTP_STATUS.NOT_FOUND)
+    appAssert(admin.role === ROLE_CONSTANTS[202], "Only admins can review overtime records", HTTP_STATUS.FORBIDDEN)
+
+    // Find overtime record
+    const overtimeRecord = await OvertimeRecordModel.findById(recordId)
+      .populate({
+        path: 'employeeId',
+        populate: {
+          path: 'userId',
+          select: 'name email'
+        }
+      })
+    
+    appAssert(overtimeRecord, "Overtime record not found", HTTP_STATUS.NOT_FOUND)
+    appAssert(overtimeRecord.status === "Pending", "Record has already been reviewed", HTTP_STATUS.BAD_REQUEST)
+
+    // Update record status
+    overtimeRecord.status = "Approved"
+    overtimeRecord.reviewedBy = reviewedBy
+    overtimeRecord.reviewedAt = new Date()
+    if (reviewNotes) {
+      overtimeRecord.reviewNotes = reviewNotes.trim()
+    }
+
+    await overtimeRecord.save()
+
+    logger.info(`${overtimeRecord.type} record ${recordId} approved by ${admin.name} for employee ${overtimeRecord.employeeId.userId.name}`)
+
+    return {
+      record: {
+        id: overtimeRecord._id,
+        type: overtimeRecord.type,
+        status: overtimeRecord.status,
+        reviewedBy: {
+          id: admin._id,
+          name: admin.name,
+          email: admin.email
+        },
+        reviewedAt: overtimeRecord.reviewedAt,
+        reviewNotes: overtimeRecord.reviewNotes
+      },
+      message: `${overtimeRecord.type} record approved successfully`
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * Decline overtime/undertime record
+ */
+const declineOvertimeRecordService = async (recordId, reviewedBy, reviewNotes) => {
+  try {
+    // Validate inputs
+    appAssert(recordId, "Record ID is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(reviewedBy, "Reviewer ID is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(reviewNotes, "Review notes are required when declining", HTTP_STATUS.BAD_REQUEST)
+    appAssert(validator.isMongoId(recordId), "Invalid record ID", HTTP_STATUS.BAD_REQUEST)
+    appAssert(validator.isMongoId(reviewedBy), "Invalid reviewer ID", HTTP_STATUS.BAD_REQUEST)
+    appAssert(typeof reviewNotes === "string" && reviewNotes.trim().length > 0, "Review notes cannot be empty", HTTP_STATUS.BAD_REQUEST)
+
+    // Find the reviewer (admin)
+    const admin = await UserModel.findById(reviewedBy)
+    appAssert(admin, "Reviewer not found", HTTP_STATUS.NOT_FOUND)
+    appAssert(admin.role === ROLE_CONSTANTS[202], "Only admins can review overtime records", HTTP_STATUS.FORBIDDEN)
+
+    // Find overtime record
+    const overtimeRecord = await OvertimeRecordModel.findById(recordId)
+      .populate({
+        path: 'employeeId',
+        populate: {
+          path: 'userId',
+          select: 'name email'
+        }
+      })
+    
+    appAssert(overtimeRecord, "Overtime record not found", HTTP_STATUS.NOT_FOUND)
+    appAssert(overtimeRecord.status === "Pending", "Record has already been reviewed", HTTP_STATUS.BAD_REQUEST)
+
+    // Update record status
+    overtimeRecord.status = "Declined"
+    overtimeRecord.reviewedBy = reviewedBy
+    overtimeRecord.reviewedAt = new Date()
+    overtimeRecord.reviewNotes = reviewNotes.trim()
+
+    await overtimeRecord.save()
+
+    logger.info(`${overtimeRecord.type} record ${recordId} declined by ${admin.name} for employee ${overtimeRecord.employeeId.userId.name}. Reason: ${reviewNotes}`)
+
+    return {
+      record: {
+        id: overtimeRecord._id,
+        type: overtimeRecord.type,
+        status: overtimeRecord.status,
+        reviewedBy: {
+          id: admin._id,
+          name: admin.name,
+          email: admin.email
+        },
+        reviewedAt: overtimeRecord.reviewedAt,
+        reviewNotes: overtimeRecord.reviewNotes
+      },
+      message: `${overtimeRecord.type} record declined successfully`
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * Get overtime statistics for dashboard
+ */
+const getOvertimeStatisticsService = async (startDate = null, endDate = null) => {
+  try {
+    // Build date filter
+    const dateFilter = {}
+    
+    if (startDate && endDate) {
+      dateFilter.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      }
+    }
+
+    // Get counts by status
+    const pendingCount = await OvertimeRecordModel.countDocuments({ ...dateFilter, status: "Pending" })
+    const approvedCount = await OvertimeRecordModel.countDocuments({ ...dateFilter, status: "Approved" })
+    const declinedCount = await OvertimeRecordModel.countDocuments({ ...dateFilter, status: "Declined" })
+
+    // Get counts by type
+    const overtimeCount = await OvertimeRecordModel.countDocuments({ ...dateFilter, type: "Overtime" })
+    const undertimeCount = await OvertimeRecordModel.countDocuments({ ...dateFilter, type: "Undertime" })
+
+    // Calculate total minutes
+    const approvedOvertimeRecords = await OvertimeRecordModel.find({ 
+      ...dateFilter, 
+      status: "Approved", 
+      type: "Overtime" 
+    })
+    const totalOvertimeMinutes = approvedOvertimeRecords.reduce((sum, record) => sum + record.minutes, 0)
+
+    const approvedUndertimeRecords = await OvertimeRecordModel.find({ 
+      ...dateFilter, 
+      status: "Approved", 
+      type: "Undertime" 
+    })
+    const totalUndertimeMinutes = approvedUndertimeRecords.reduce((sum, record) => sum + record.minutes, 0)
+
+    return {
+      statistics: {
+        byStatus: {
+          pending: pendingCount,
+          approved: approvedCount,
+          declined: declinedCount,
+          total: pendingCount + approvedCount + declinedCount
+        },
+        byType: {
+          overtime: overtimeCount,
+          undertime: undertimeCount
+        },
+        approvedMinutes: {
+          overtime: totalOvertimeMinutes,
+          overtimeHours: (totalOvertimeMinutes / 60).toFixed(2),
+          undertime: totalUndertimeMinutes,
+          undertimeHours: (totalUndertimeMinutes / 60).toFixed(2)
+        }
+      },
+      message: "Overtime statistics fetched successfully"
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
+const editEmployeeLeaveBalanceService = async (employeeId, leaveType, beginningBalance, adminUserId) => {
+  try {
+    // Validate inputs
+    appAssert(employeeId, "Employee ID is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(validator.isMongoId(employeeId), "Invalid employee ID", HTTP_STATUS.BAD_REQUEST)
+    appAssert(leaveType, "Leave type is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(['sickLeave', 'vacationLeave'].includes(leaveType), 
+      "Leave type must be 'sickLeave' or 'vacationLeave'", HTTP_STATUS.BAD_REQUEST)
+    appAssert(beginningBalance !== undefined && beginningBalance !== null, 
+      "Beginning balance is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(typeof beginningBalance === 'number', 
+      "Beginning balance must be a number", HTTP_STATUS.BAD_REQUEST)
+    appAssert(beginningBalance >= 0, 
+      "Beginning balance cannot be negative", HTTP_STATUS.BAD_REQUEST)
+    appAssert(Number.isFinite(beginningBalance), 
+      "Beginning balance must be a finite number", HTTP_STATUS.BAD_REQUEST)
+    appAssert(adminUserId, "Admin user ID is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(validator.isMongoId(adminUserId), "Invalid admin user ID", HTTP_STATUS.BAD_REQUEST)
+
+    // Verify admin user exists and has correct role
+    const admin = await UserModel.findById(adminUserId)
+    appAssert(admin, "Admin user not found", HTTP_STATUS.NOT_FOUND)
+    appAssert(admin.role === ROLE_CONSTANTS[202], 
+      "Only admins can edit employee leave balances", HTTP_STATUS.FORBIDDEN)
+    appAssert(admin.isActive, "Admin account is not active", HTTP_STATUS.FORBIDDEN)
+
+    // Find employee
+    const employee = await EmployeeModel.findById(employeeId)
+      .populate('userId', 'name email isActive')
+    appAssert(employee, "Employee not found", HTTP_STATUS.NOT_FOUND)
+    appAssert(employee.userId.isActive, "Employee account is not active", HTTP_STATUS.BAD_REQUEST)
+
+    // Get current balance
+    const currentBalance = employee.leaveBalance[leaveType]
+    const previousBeginning = currentBalance.beginning
+    const currentAvailments = currentBalance.availments
+
+    // Calculate new remaining balance
+    // remaining = beginning - availments
+    const newRemaining = beginningBalance - currentAvailments
+
+    // Validate that new remaining is not negative
+    appAssert(newRemaining >= 0, 
+      `New beginning balance (${beginningBalance}) cannot be less than current availments (${currentAvailments})`, 
+      HTTP_STATUS.BAD_REQUEST)
+
+    // Update employee leave balance
+    const updateFields = {
+      [`leaveBalance.${leaveType}.beginning`]: beginningBalance,
+      [`leaveBalance.${leaveType}.remaining`]: newRemaining
+    }
+
+    const updatedEmployee = await EmployeeModel.findByIdAndUpdate(
+      employeeId,
+      { $set: updateFields },
+      { new: true, runValidators: true }
+    ).populate('userId', 'name email displayImage')
+
+    const updatedBalance = updatedEmployee.leaveBalance[leaveType]
+
+    // Log the change
+    const leaveTypeName = leaveType === 'sickLeave' ? 'Sick Leave' : 'Vacation Leave'
+    logger.info(`Leave balance updated by ${admin.name} (${admin.email}) for employee ${employee.userId.name} (${employee.userId.email})`)
+    logger.info(`Leave Type: ${leaveTypeName}`)
+    logger.info(`Beginning Balance: ${previousBeginning} → ${beginningBalance}`)
+    logger.info(`Remaining Balance: ${currentBalance.remaining} → ${newRemaining}`)
+
+    return {
+      employee: {
+        id: updatedEmployee._id,
+        name: updatedEmployee.userId.name,
+        email: updatedEmployee.userId.email,
+        displayImage: updatedEmployee.userId.displayImage
+      },
+      leaveType: leaveTypeName,
+      previousBalance: {
+        beginning: previousBeginning,
+        availments: currentAvailments,
+        remaining: currentBalance.remaining,
+        active: currentBalance.active,
+        reserved: currentBalance.reserved
+      },
+      updatedBalance: {
+        beginning: updatedBalance.beginning,
+        availments: updatedBalance.availments,
+        remaining: updatedBalance.remaining,
+        active: updatedBalance.active,
+        reserved: updatedBalance.reserved
+      },
+      updatedBy: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email
+      },
+      updatedAt: new Date(),
+      message: `${leaveTypeName} beginning balance updated successfully`
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
 module.exports = {
   createEmployeeAccountService,
   fetchAllActiveEmployeeService,
@@ -901,4 +1354,9 @@ module.exports = {
   changeAssignedEmployeeService,
   fetchScheduleSlotService,
   generateEmployeeMonthlyReportService,
+  fetchAllOvertimeRecordsService,
+  approveOvertimeRecordService,
+  declineOvertimeRecordService,
+  getOvertimeStatisticsService,
+  editEmployeeLeaveBalanceService,
 }

@@ -291,5 +291,7 @@ router.post('/v1/submit-leave-request/:userId', EmployeeController.requestLeaveC
  */
 router.put('/v1/activate-account', EmployeeController.activateAccount)
 
+router.post('/v1/submit-reason', EmployeeController.submitOvertimeReason)
+
 // Export router
 module.exports = router
