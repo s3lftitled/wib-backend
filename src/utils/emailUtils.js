@@ -25,7 +25,7 @@ class EmailUtil {
   }
 
   async sendPasswordSetupEmail(email, token) {
-    const setupLink = `${process.env.BASE_URL}/activate-account/${token}/${encodeURIComponent(email)}`
+    const setupLink = `${process.env.BASE_URL_EMPLOYEE}/activate-account/${token}/${encodeURIComponent(email)}`
 
     try {
       const mailOptions = {
@@ -63,7 +63,7 @@ class EmailUtil {
         return
       }
 
-      const adminInterfaceUrl = `${process.env.BASE_URL}/dashboard`
+      const adminInterfaceUrl = `${process.env.BASE_URL_ADMIN}/dashboard`
       
       const startDate = new Date(leaveRequest.startDate).toLocaleDateString()
       const endDate = new Date(leaveRequest.endDate).toLocaleDateString()
@@ -123,7 +123,7 @@ class EmailUtil {
         return
       }
 
-      const adminInterfaceUrl = `${process.env.BASE_URL}/dashboard`
+      const adminInterfaceUrl = `${process.env.BASE_URL_ADMIN}/dashboard`
       
       const recordDate = new Date(overtimeRecord.date).toLocaleDateString()
       const scheduledEndTime = new Date(overtimeRecord.scheduledEnd).toLocaleTimeString()
@@ -184,7 +184,7 @@ class EmailUtil {
  */
   async sendScheduleNotificationEmail(email, name, subject, message, adminName) {
     try {
-      const scheduleUrl = `${process.env.BASE_URL}/employee/schedule`
+      const scheduleUrl = `${process.env.BASE_URL_EMPLOYEE}/authentication`
       
       const mailOptions = {
         from: process.env.USER,

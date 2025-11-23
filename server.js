@@ -22,9 +22,8 @@ const userRouter = require('./src/routers/userRouter')
 const app = express()
 
 const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5000'
+  process.env.BASE_URL_ADMIN,
+  process.env.BASE_URL_EMPLOYEE
 ]
   
 app.use(cors({
