@@ -1338,6 +1338,158 @@ const editEmployeeLeaveBalanceService = async (employeeId, leaveType, beginningB
   }
 }
 
+/**
+ * Notify all active employees about new schedules
+ * @param {string} adminUserId - ID of the admin triggering the notification
+ * @param {string} message - Optional custom message to include in the notification
+ * @param {Date} startDate - Optional start date of schedule period
+ * @param {Date} endDate - Optional end date of schedule period
+ */
+const notifyAllEmployeesService = async (adminUserId, message = null, startDate = null, endDate = null) => {
+  try {
+    // Validate admin user ID
+    appAssert(adminUserId, "Admin user ID is required", HTTP_STATUS.BAD_REQUEST)
+    appAssert(validator.isMongoId(adminUserId), "Invalid admin user ID", HTTP_STATUS.BAD_REQUEST)
+
+    // Verify admin user exists and has correct role
+    const admin = await UserModel.findById(adminUserId)
+    appAssert(admin, "Admin user not found", HTTP_STATUS.NOT_FOUND)
+    appAssert(admin.role === ROLE_CONSTANTS[202], 
+      "Only admins can send notifications to all employees", HTTP_STATUS.FORBIDDEN)
+    appAssert(admin.isActive, "Admin account is not active", HTTP_STATUS.FORBIDDEN)
+
+    // Validate dates if provided
+    if (startDate) {
+      appAssert(!isNaN(Date.parse(startDate)), "Invalid start date", HTTP_STATUS.BAD_REQUEST)
+    }
+    if (endDate) {
+      appAssert(!isNaN(Date.parse(endDate)), "Invalid end date", HTTP_STATUS.BAD_REQUEST)
+    }
+    if (startDate && endDate) {
+      appAssert(new Date(startDate) <= new Date(endDate), 
+        "Start date must be before or equal to end date", HTTP_STATUS.BAD_REQUEST)
+    }
+
+    // Fetch all active employees with their email addresses
+    const employees = await EmployeeModel.find()
+      .populate({
+        path: 'userId',
+        match: { isActive: true },
+        select: 'name email isActive'
+      })
+
+    // Filter out employees with inactive user accounts or null userId
+    const activeEmployees = employees.filter(emp => emp.userId && emp.userId.isActive)
+
+    appAssert(activeEmployees.length > 0, 
+      "No active employees found to notify", HTTP_STATUS.NOT_FOUND)
+
+    // Build date range info for email if dates provided
+    let dateRangeText = ""
+    if (startDate && endDate) {
+      const start = new Date(startDate).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })
+      const end = new Date(endDate).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })
+      dateRangeText = `for the period from ${start} to ${end}`
+    } else if (startDate) {
+      const start = new Date(startDate).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })
+      dateRangeText = `starting from ${start}`
+    }
+
+    // Prepare notification details
+    const notificationSubject = "New Schedule Available"
+    const defaultMessage = `New schedules have been posted ${dateRangeText}. Please check your schedule in the system.`
+    const notificationMessage = message ? message.trim() : defaultMessage
+
+    // Send email notifications to all active employees
+    const emailPromises = activeEmployees.map(async (employee) => {
+      try {
+        await EmailUtil.sendScheduleNotificationEmail(
+          employee.userId.email,
+          employee.userId.name,
+          notificationSubject,
+          notificationMessage,
+          admin.name
+        )
+        return {
+          success: true,
+          employeeId: employee._id,
+          employeeName: employee.userId.name,
+          email: employee.userId.email
+        }
+      } catch (emailError) {
+        logger.error(`Failed to send email to ${employee.userId.email}: ${emailError.message}`)
+        return {
+          success: false,
+          employeeId: employee._id,
+          employeeName: employee.userId.name,
+          email: employee.userId.email,
+          error: emailError.message
+        }
+      }
+    })
+
+    // Wait for all email sending attempts to complete
+    const emailResults = await Promise.all(emailPromises)
+
+    // Count successes and failures
+    const successCount = emailResults.filter(result => result.success).length
+    const failureCount = emailResults.filter(result => !result.success).length
+    const failedEmails = emailResults.filter(result => !result.success)
+
+    logger.info(`Schedule notification sent by ${admin.name} (${admin.email})`)
+    logger.info(`Successfully notified: ${successCount} employees`)
+    if (failureCount > 0) {
+      logger.warn(`Failed to notify: ${failureCount} employees`)
+      failedEmails.forEach(failed => {
+        logger.warn(`- ${failed.employeeName} (${failed.email}): ${failed.error}`)
+      })
+    }
+
+    return {
+      notification: {
+        subject: notificationSubject,
+        message: notificationMessage,
+        dateRange: dateRangeText || "Not specified",
+        sentBy: {
+          id: admin._id,
+          name: admin.name,
+          email: admin.email
+        },
+        sentAt: new Date()
+      },
+      results: {
+        totalEmployees: activeEmployees.length,
+        successCount,
+        failureCount,
+        failedEmails: failedEmails.map(f => ({
+          employeeName: f.employeeName,
+          email: f.email,
+          error: f.error
+        }))
+      },
+      message: failureCount === 0 
+        ? `Successfully notified all ${successCount} active employees`
+        : `Notified ${successCount} employees, ${failureCount} failed`
+    }
+
+  } catch (error) {
+    throw error
+  }
+}
+
+
 module.exports = {
   createEmployeeAccountService,
   fetchAllActiveEmployeeService,
@@ -1359,4 +1511,5 @@ module.exports = {
   declineOvertimeRecordService,
   getOvertimeStatisticsService,
   editEmployeeLeaveBalanceService,
+  notifyAllEmployeesService,
 }

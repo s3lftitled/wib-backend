@@ -21,6 +21,7 @@ const {
   declineOvertimeRecordService,
   getOvertimeStatisticsService,
   editEmployeeLeaveBalanceService,
+  notifyAllEmployeesService,
 } = require('../services/adminServices')
 
 class AdminController {
@@ -321,6 +322,25 @@ class AdminController {
       res.status(HTTP_STATUS.OK).json(result)
     } catch (error) {
       logger.error(`Error editing employee leave balance - ${error.message}`)
+      next(error)
+    }
+  }
+
+  async notifyAllEmployees(req, res, next) {
+    const { adminUserId } = req.params
+    const { message = null, startDate = null, endDate = null } = req.body
+
+    try {
+      const result = await notifyAllEmployeesService(
+        adminUserId,
+        message,
+        startDate,
+        endDate
+      )
+
+      res.status(HTTP_STATUS.OK).json(result)
+    } catch (error) {
+      logger.error(`Error notifying employees - ${error.message}`)
       next(error)
     }
   }

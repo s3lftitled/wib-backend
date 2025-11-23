@@ -665,4 +665,53 @@ router.get('/v1/overtime/statistics', AdminController.getOvertimeStatistics)
  */
 router.put('/v1/edit-leave-balance/:employeeId/:adminUserId', AdminController.editEmployeeLeaveBalance)
 
+// Add this route AFTER the edit-leave-balance route and BEFORE module.exports
+
+/**
+ * @swagger
+ * /api/admin/v1/notify-employees/{adminUserId}:
+ *   post:
+ *     summary: Notify all active employees about new schedules
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: path
+ *         name: adminUserId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Admin user ID who is sending the notification
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               message:
+ *                 type: string
+ *                 example: New schedules for December are now available. Please check your assignments.
+ *                 description: Custom notification message (optional)
+ *               startDate:
+ *                 type: string
+ *                 format: date
+ *                 example: 2025-12-01
+ *                 description: Start date of schedule period (optional)
+ *               endDate:
+ *                 type: string
+ *                 format: date
+ *                 example: 2025-12-31
+ *                 description: End date of schedule period (optional)
+ *     responses:
+ *       200:
+ *         description: Notification sent successfully
+ *       400:
+ *         description: Invalid input data
+ *       403:
+ *         description: Only admins can send notifications
+ *       404:
+ *         description: Admin user not found or no active employees found
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/v1/notify-employees/:adminUserId', AdminController.notifyAllEmployees)
+
 module.exports = router

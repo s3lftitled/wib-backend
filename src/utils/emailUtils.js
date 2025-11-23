@@ -172,6 +172,74 @@ class EmailUtil {
       logger.error('Error sending overtime notification:', error)
     }
   }
+
+  /**
+ * Sends schedule notification email to an employee
+ * @param {string} email - Employee's email address
+ * @param {string} name - Employee's name
+ * @param {string} subject - Email subject
+ * @param {string} message - Notification message
+ * @param {string} adminName - Name of admin who sent the notification
+ * @returns {Promise<void>}
+ */
+  async sendScheduleNotificationEmail(email, name, subject, message, adminName) {
+    try {
+      const scheduleUrl = `${process.env.BASE_URL}/employee/schedule`
+      
+      const mailOptions = {
+        from: process.env.USER,
+        to: email,
+        subject: subject,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #000000;">
+            <h2 style="color: #2196F3;">📅 Schedule Update</h2>
+            
+            <p>Hello <strong>${name}</strong>,</p>
+            
+            <div style="background-color: #E3F2FD; padding: 20px; border-left: 4px solid #2196F3; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 0; font-size: 16px; line-height: 1.6;">
+                ${message}
+              </p>
+            </div>
+            
+            <p style="text-align: center; margin: 30px 0;">
+              <a href="${scheduleUrl}" 
+                style="background-color: #2196F3; color: white; padding: 14px 28px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                View Your Schedule
+              </a>
+            </p>
+            
+            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-top: 30px;">
+              <p style="margin: 5px 0; font-size: 14px; color: #666;">
+                <strong>Notification sent by:</strong> ${adminName}
+              </p>
+              <p style="margin: 5px 0; font-size: 14px; color: #666;">
+                <strong>Date:</strong> ${new Date().toLocaleString('en-US', { 
+                  dateStyle: 'long', 
+                  timeStyle: 'short' 
+                })}
+              </p>
+            </div>
+            
+            <p style="color: #666; font-size: 12px; margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px;">
+              This is an automated notification from WIB Attendance Management System.<br/>
+              Please do not reply to this email.
+            </p>
+            
+            <p style="color: #333; font-size: 14px; margin-top: 20px;">
+              When In Baguio Inc.
+            </p>
+          </div>
+        `,
+      }
+
+      await this.transporter.sendMail(mailOptions)
+      logger.info(`Schedule notification sent to ${email}`)
+    } catch (error) {
+      logger.error(`Error sending schedule notification to ${email}:`, error)
+      throw new Error(`Failed to send schedule notification email to ${email}`)
+    }
+  }
 }
 
 module.exports = new EmailUtil()
