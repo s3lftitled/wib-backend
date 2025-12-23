@@ -2,6 +2,10 @@ const nodemailer = require('nodemailer')
 const logger = require('../logger/logger')
 require('dotenv').config()
 const crypto = require('crypto')
+const dns = require('dns')
+
+// ✅ FIX: prevent IPv6 DNS delays in production
+dns.setDefaultResultOrder('ipv4first')
 
 /**
  * 📧 Utility class for sending emails.
@@ -10,13 +14,34 @@ class EmailUtil {
   constructor() {
     this.transporter = nodemailer.createTransport({
       service: 'gmail',
+
+      // ✅ FIX: explicit Gmail SMTP (prevents slow auto-detect)
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // ❌ was true (causes prod delay)
+
       auth: {
         user: process.env.USER,
         pass: process.env.PASSWORD,
       },
-      secure: true,
-      pool: true,
-      maxConnections: 5,
+
+      // ❌ FIX: pooling causes Gmail to hang in prod
+      pool: false,
+      maxConnections: 1,
+
+      // ✅ FIX: hard timeouts (NO MORE 5 MINUTES)
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 10_000,
+    })
+
+    // ✅ FIX: warm up SMTP connection once
+    this.transporter.verify((err) => {
+      if (err) {
+        logger.error('SMTP verify failed:', err)
+      } else {
+        logger.info('SMTP server ready')
+      }
     })
   }
 
@@ -64,10 +89,9 @@ class EmailUtil {
       }
 
       const adminInterfaceUrl = `${process.env.BASE_URL_ADMIN}/dashboard`
-      
       const startDate = new Date(leaveRequest.startDate).toLocaleDateString()
       const endDate = new Date(leaveRequest.endDate).toLocaleDateString()
-      
+
       const mailOptions = {
         from: process.env.USER,
         to: adminEmails.join(', '),
@@ -75,7 +99,7 @@ class EmailUtil {
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #000000;">
             <h2>New Leave Request</h2>
-            
+
             <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
               <p><strong>Employee:</strong> ${employee.name}</p>
               <p><strong>Email:</strong> ${employee.email}</p>
@@ -86,14 +110,14 @@ class EmailUtil {
               <p><strong>End Date:</strong> ${endDate}</p>
               <p><strong>Reason:</strong> ${leaveRequest.reason}</p>
             </div>
-            
+
             <p style="text-align: center; margin: 30px 0;">
               <a href="${adminInterfaceUrl}" 
                  style="background-color: #2196F3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
                  Review Leave Request
               </a>
             </p>
-            
+
             <p style="color: #666; font-size: 12px;">
               This is an automated notification from WIB Attendance Management System
             </p>
@@ -108,14 +132,6 @@ class EmailUtil {
     }
   }
 
-  /**
-   * Sends overtime/undertime notification to admin emails
-   * @param {Array<string>} adminEmails - Array of admin email addresses
-   * @param {Object} overtimeRecord - The overtime/undertime record document
-   * @param {Object} user - The user object (name, email)
-   * @param {Object} employee - The employee document
-   * @returns {Promise<void>}
-   */
   async sendOvertimeNotification(adminEmails, overtimeRecord, user, employee) {
     try {
       if (!adminEmails || adminEmails.length === 0) {
@@ -124,14 +140,13 @@ class EmailUtil {
       }
 
       const adminInterfaceUrl = `${process.env.BASE_URL_ADMIN}/dashboard`
-      
       const recordDate = new Date(overtimeRecord.date).toLocaleDateString()
       const scheduledEndTime = new Date(overtimeRecord.scheduledEnd).toLocaleTimeString()
       const actualTimeOut = new Date(overtimeRecord.actualTimeOut).toLocaleTimeString()
-      
+
       const typeColor = overtimeRecord.type === 'Overtime' ? '#FF9800' : '#F44336'
       const typeLabel = overtimeRecord.type === 'Overtime' ? 'Overtime' : 'Undertime'
-      
+
       const mailOptions = {
         from: process.env.USER,
         to: adminEmails.join(', '),
@@ -139,7 +154,7 @@ class EmailUtil {
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #000000;">
             <h2 style="color: ${typeColor};">New ${typeLabel} Record</h2>
-            
+
             <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
               <p><strong>Employee:</strong> ${user.name}</p>
               <p><strong>Email:</strong> ${user.email}</p>
@@ -151,14 +166,14 @@ class EmailUtil {
               <p><strong>Reason:</strong> ${overtimeRecord.reason}</p>
               <p><strong>Status:</strong> ${overtimeRecord.status}</p>
             </div>
-            
+
             <p style="text-align: center; margin: 30px 0;">
               <a href="${adminInterfaceUrl}" 
                  style="background-color: ${typeColor}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
                  Review ${typeLabel} Record
               </a>
             </p>
-            
+
             <p style="color: #666; font-size: 12px;">
               This is an automated notification from WIB Attendance Management System
             </p>
@@ -173,19 +188,10 @@ class EmailUtil {
     }
   }
 
-  /**
- * Sends schedule notification email to an employee
- * @param {string} email - Employee's email address
- * @param {string} name - Employee's name
- * @param {string} subject - Email subject
- * @param {string} message - Notification message
- * @param {string} adminName - Name of admin who sent the notification
- * @returns {Promise<void>}
- */
   async sendScheduleNotificationEmail(email, name, subject, message, adminName) {
     try {
       const scheduleUrl = `${process.env.BASE_URL_EMPLOYEE}/authentication`
-      
+
       const mailOptions = {
         from: process.env.USER,
         to: email,
@@ -193,22 +199,22 @@ class EmailUtil {
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #000000;">
             <h2 style="color: #2196F3;">📅 Schedule Update</h2>
-            
+
             <p>Hello <strong>${name}</strong>,</p>
-            
+
             <div style="background-color: #E3F2FD; padding: 20px; border-left: 4px solid #2196F3; border-radius: 5px; margin: 20px 0;">
               <p style="margin: 0; font-size: 16px; line-height: 1.6;">
                 ${message}
               </p>
             </div>
-            
+
             <p style="text-align: center; margin: 30px 0;">
               <a href="${scheduleUrl}" 
                 style="background-color: #2196F3; color: white; padding: 14px 28px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
                 View Your Schedule
               </a>
             </p>
-            
+
             <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-top: 30px;">
               <p style="margin: 5px 0; font-size: 14px; color: #666;">
                 <strong>Notification sent by:</strong> ${adminName}
@@ -220,12 +226,12 @@ class EmailUtil {
                 })}
               </p>
             </div>
-            
+
             <p style="color: #666; font-size: 12px; margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px;">
               This is an automated notification from WIB Attendance Management System.<br/>
               Please do not reply to this email.
             </p>
-            
+
             <p style="color: #333; font-size: 14px; margin-top: 20px;">
               When In Baguio Inc.
             </p>
