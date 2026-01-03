@@ -53,15 +53,6 @@ app.get('/health-check', (req, res) => {
   res.send('server is healthy!!')
 })
 
-app.post('/api/admin/trigger-absence-marker', async (req, res) => {
-  try {
-    const result = await manualTriggerAbsenceMarker()
-    res.json({ success: true, result })
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message })
-  }
-})
-
 // Authentication base routes
 app.use('/api/auth', authRouter)
 
