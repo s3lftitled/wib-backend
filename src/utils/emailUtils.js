@@ -12,28 +12,23 @@ dns.setDefaultResultOrder('ipv4first')
  */
 class EmailUtil {
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-
-      // ✅ FIX: explicit Gmail SMTP (prevents slow auto-detect)
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false, // ❌ was true (causes prod delay)
-
-      auth: {
-        user: process.env.USER,
-        pass: process.env.PASSWORD,
-      },
-
-      // ❌ FIX: pooling causes Gmail to hang in prod
-      pool: false,
-      maxConnections: 1,
-
-      // ✅ FIX: hard timeouts (NO MORE 5 MINUTES)
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 10_000,
-    })
+   this.transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true, // Use TLS
+  auth: {
+    user: process.env.USER,
+    pass: process.env.PASSWORD,
+  },
+  pool: false,
+  connectionTimeout: 60000, // 60 seconds
+  greetingTimeout: 60000,
+  socketTimeout: 60000,
+  tls: {
+    rejectUnauthorized: true,
+    minVersion: 'TLSv1.2'
+  }
+})
 
     // ✅ FIX: warm up SMTP connection once
     this.transporter.verify((err) => {
