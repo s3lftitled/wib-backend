@@ -22,7 +22,7 @@ const connectWithRetry = async (retries = 5, delay = 3000) => {
     } catch (err) {
       logger.error(`MongoDB connection attempt ${i + 1} failed: ${err.message}`)
       if (i < retries - 1) {
-        logger.info(`🔄 Retrying in ${delay / 1000} seconds...`)
+        logger.info(`Retrying in ${delay / 1000} seconds...`)
         await sleep(delay)
       } else {
         logger.error('All MongoDB connection attempts failed. Exiting.')

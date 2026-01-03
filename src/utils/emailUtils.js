@@ -1,48 +1,22 @@
-const nodemailer = require('nodemailer')
+const sgMail = require('@sendgrid/mail')
 const logger = require('../logger/logger')
 require('dotenv').config()
 const crypto = require('crypto')
-const dns = require('dns')
 
-// ✅ FIX: prevent IPv6 DNS delays in production
-dns.setDefaultResultOrder('ipv4first')
+// Initialize SendGrid
+sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
 /**
- * 📧 Utility class for sending emails.
+ * 📧 Utility class for sending emails via SendGrid
  */
 class EmailUtil {
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-
-      // ✅ FIX: explicit Gmail SMTP (prevents slow auto-detect)
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false, // ❌ was true (causes prod delay)
-
-      auth: {
-        user: process.env.USER,
-        pass: process.env.PASSWORD,
-      },
-
-      // ❌ FIX: pooling causes Gmail to hang in prod
-      pool: false,
-      maxConnections: 1,
-
-      // ✅ FIX: hard timeouts (NO MORE 5 MINUTES)
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 10_000,
-    })
-
-    // ✅ FIX: warm up SMTP connection once
-    this.transporter.verify((err) => {
-      if (err) {
-        logger.error('SMTP verify failed:', err)
-      } else {
-        logger.info('SMTP server ready')
-      }
-    })
+    // Verify SendGrid API key is set
+    if (!process.env.SENDGRID_API_KEY) {
+      logger.error('❌ SENDGRID_API_KEY is not set in environment variables')
+    } else {
+      logger.info('✅ SendGrid configured successfully')
+    }
   }
 
   generateToken() {
@@ -53,9 +27,9 @@ class EmailUtil {
     const setupLink = `${process.env.BASE_URL_EMPLOYEE}/activate-account/${token}/${encodeURIComponent(email)}`
 
     try {
-      const mailOptions = {
-        from: process.env.USER,
+      const msg = {
         to: email,
+        from: process.env.SENDGRID_VERIFIED_SENDER, // Must be verified in SendGrid
         subject: 'Set Up Your WIB Attendance Account Password',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #000000;">
@@ -73,10 +47,11 @@ class EmailUtil {
         `,
       }
 
-      await this.transporter.sendMail(mailOptions)
+      await sgMail.send(msg)
+      logger.info(`✅ Password setup email sent to ${email}`)
       return token
     } catch (error) {
-      logger.error('Error sending password setup email:', error)
+      logger.error('❌ SendGrid error:', error.response?.body || error)
       throw new Error('Failed to send password setup email.')
     }
   }
@@ -92,9 +67,9 @@ class EmailUtil {
       const startDate = new Date(leaveRequest.startDate).toLocaleDateString()
       const endDate = new Date(leaveRequest.endDate).toLocaleDateString()
 
-      const mailOptions = {
-        from: process.env.USER,
-        to: adminEmails.join(', '),
+      const msg = {
+        to: adminEmails,
+        from: process.env.SENDGRID_VERIFIED_SENDER,
         subject: `New Leave Request from ${employee.name}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #000000;">
@@ -125,10 +100,10 @@ class EmailUtil {
         `,
       }
 
-      await this.transporter.sendMail(mailOptions)
-      logger.info(`Leave request notification sent to ${adminEmails.length} admin(s)`)
+      await sgMail.send(msg)
+      logger.info(`✅ Leave request notification sent to ${adminEmails.length} admin(s)`)
     } catch (error) {
-      logger.error('Error sending leave request notification:', error)
+      logger.error('❌ SendGrid error:', error.response?.body || error)
     }
   }
 
@@ -147,9 +122,9 @@ class EmailUtil {
       const typeColor = overtimeRecord.type === 'Overtime' ? '#FF9800' : '#F44336'
       const typeLabel = overtimeRecord.type === 'Overtime' ? 'Overtime' : 'Undertime'
 
-      const mailOptions = {
-        from: process.env.USER,
-        to: adminEmails.join(', '),
+      const msg = {
+        to: adminEmails,
+        from: process.env.SENDGRID_VERIFIED_SENDER,
         subject: `New ${typeLabel} Record from ${user.name}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #000000;">
@@ -181,10 +156,10 @@ class EmailUtil {
         `,
       }
 
-      await this.transporter.sendMail(mailOptions)
-      logger.info(`${typeLabel} notification sent to ${adminEmails.length} admin(s)`)
+      await sgMail.send(msg)
+      logger.info(`✅ ${typeLabel} notification sent to ${adminEmails.length} admin(s)`)
     } catch (error) {
-      logger.error('Error sending overtime notification:', error)
+      logger.error('❌ SendGrid error:', error.response?.body || error)
     }
   }
 
@@ -192,9 +167,9 @@ class EmailUtil {
     try {
       const scheduleUrl = `${process.env.BASE_URL_EMPLOYEE}/authentication`
 
-      const mailOptions = {
-        from: process.env.USER,
+      const msg = {
         to: email,
+        from: process.env.SENDGRID_VERIFIED_SENDER,
         subject: subject,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #000000;">
@@ -239,10 +214,10 @@ class EmailUtil {
         `,
       }
 
-      await this.transporter.sendMail(mailOptions)
-      logger.info(`Schedule notification sent to ${email}`)
+      await sgMail.send(msg)
+      logger.info(`✅ Schedule notification sent to ${email}`)
     } catch (error) {
-      logger.error(`Error sending schedule notification to ${email}:`, error)
+      logger.error(`❌ SendGrid error for ${email}:`, error.response?.body || error)
       throw new Error(`Failed to send schedule notification email to ${email}`)
     }
   }
