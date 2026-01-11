@@ -402,6 +402,35 @@ const fetchHolidaysService = async (year, type) => {
   }
 }
 
+// Helper function: Create date in Philippines timezone (UTC+8)
+const createPhilippinesDateTime = (dateString, timeString) => {
+  // dateString format: "2025-01-15"
+  // timeString format: "09:00"
+  
+  const [year, month, day] = dateString.split('-').map(Number)
+  const [hours, minutes] = timeString.split(':').map(Number)
+  
+  // Create date in UTC that represents Philippines time
+  // Philippines is UTC+8, so we subtract 8 hours from the time
+  // to store it correctly in UTC
+  const date = new Date(Date.UTC(year, month - 1, day, hours - 8, minutes, 0, 0))
+  
+  return date
+}
+
+// Helper function: Format date to Philippines time for display
+const formatToPhilippinesTime = (date) => {
+  // Convert UTC date to Philippines time (UTC+8)
+  const utcTime = date.getTime()
+  const philippinesTime = new Date(utcTime + (8 * 60 * 60 * 1000))
+  
+  const hours = String(philippinesTime.getUTCHours()).padStart(2, '0')
+  const minutes = String(philippinesTime.getUTCMinutes()).padStart(2, '0')
+  
+  return `${hours}:${minutes}`
+}
+
+// UPDATED: createScheduleSlotService
 const createScheduleSlotService = async (date, startTime, endTime, adminUserId) => {
   try {
     appAssert(date, "Date is required", HTTP_STATUS.BAD_REQUEST)
@@ -409,26 +438,47 @@ const createScheduleSlotService = async (date, startTime, endTime, adminUserId) 
     appAssert(endTime, "End time is required", HTTP_STATUS.BAD_REQUEST)
     appAssert(adminUserId, "Admin user ID is required", HTTP_STATUS.BAD_REQUEST)
 
-    const start = new Date(`${date}T${startTime}`)
-    const end = new Date(`${date}T${endTime}`)
+    // Validate time format (HH:mm)
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/
+    appAssert(timeRegex.test(startTime), "Invalid start time format. Use HH:mm (e.g., 09:00)", HTTP_STATUS.BAD_REQUEST)
+    appAssert(timeRegex.test(endTime), "Invalid end time format. Use HH:mm (e.g., 17:00)", HTTP_STATUS.BAD_REQUEST)
 
-    appAssert(start < end, "Start time must be before end time", HTTP_STATUS.BAD_REQUEST)
+    // Compare times as minutes to ensure start is before end
+    const [startHour, startMin] = startTime.split(':').map(Number)
+    const [endHour, endMin] = endTime.split(':').map(Number)
+    const startMinutes = startHour * 60 + startMin
+    const endMinutes = endHour * 60 + endMin
+    
+    appAssert(startMinutes < endMinutes, "Start time must be before end time", HTTP_STATUS.BAD_REQUEST)
 
     const admin = await UserModel.findById(adminUserId)
     appAssert(admin && admin.role === ROLE_CONSTANTS[202], "Only admins can create schedule slots", HTTP_STATUS.FORBIDDEN)
 
+    // Create dates in Philippines timezone
+    const start = createPhilippinesDateTime(date, startTime)
+    const end = createPhilippinesDateTime(date, endTime)
+
+    // Create schedule date at start of day - use the date string directly
+    const [year, month, day] = date.split('-').map(Number)
+    const scheduleDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
+
     const newSchedule = await ScheduleModel.create({
-      date: new Date(date),
+      date: scheduleDate,
       time: { start, end },
       createdBy: adminUserId
     })
+
+    logger.info(`Schedule created: ${date} ${startTime}-${endTime} (Philippines Time)`)
+    logger.info(`Stored as UTC: ${start.toISOString()} - ${end.toISOString()}`)
 
     return {
       schedule: {
         id: newSchedule._id,
         date: newSchedule.date,
         start: newSchedule.time.start,
-        end: newSchedule.time.end
+        end: newSchedule.time.end,
+        startTime: formatToPhilippinesTime(newSchedule.time.start),
+        endTime: formatToPhilippinesTime(newSchedule.time.end)
       },
       message: "Schedule slot created successfully"
     }
@@ -455,6 +505,7 @@ const deleteScheduleSlotService = async (scheduleId) => {
   }
 }
 
+// UPDATED: assignEmployeeToScheduleService
 const assignEmployeeToScheduleService = async (scheduleId, employeeId) => {
   try {
     appAssert(scheduleId, "Schedule ID is required", HTTP_STATUS.BAD_REQUEST)
@@ -490,6 +541,7 @@ const assignEmployeeToScheduleService = async (scheduleId, employeeId) => {
   }
 }
 
+// UPDATED: changeAssignedEmployeeService
 const changeAssignedEmployeeService = async (scheduleId, employeeId) => {
   try {
     appAssert(scheduleId, "Schedule ID is required", HTTP_STATUS.BAD_REQUEST)
@@ -530,18 +582,17 @@ const changeAssignedEmployeeService = async (scheduleId, employeeId) => {
     throw error
   }
 } 
-
+// UPDATED: fetchScheduleSlotService
 const fetchScheduleSlotService = async (month, year) => {
   try {
     // Validate inputs
     appAssert(!isNaN(year) && year > 1900 && year < 3000, 'Invalid year provided', HTTP_STATUS.BAD_REQUEST)
     appAssert(!isNaN(month) && month >= 1 && month <= 12, 'Invalid month provided', HTTP_STATUS.BAD_REQUEST)
 
-    // Create date range for the month
-    const startDate = new Date(year, month - 1, 1) // month is 0-indexed in Date
-    const endDate = new Date(year, month, 0, 23, 59, 59, 999) // Last day of month
+    // Create date range for the month in UTC
+    const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0))
+    const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999))
 
-    // Build query
     const query = {
       date: {
         $gte: startDate,
@@ -568,12 +619,14 @@ const fetchScheduleSlotService = async (month, year) => {
 
     appAssert(scheduleSlots && scheduleSlots.length > 0, 'No schedule slots found for this period', HTTP_STATUS.OK)
 
-    // Format response with populated employee details
+    // Format response with times converted to Philippines time
     const formattedSchedules = scheduleSlots.map(schedule => ({
       id: schedule._id,
       date: schedule.date,
-      startTime: schedule.time.start,
-      endTime: schedule.time.end,
+      startTime: formatToPhilippinesTime(schedule.time.start),  // Converts to "09:00"
+      endTime: formatToPhilippinesTime(schedule.time.end),      // Converts to "17:00"
+      startTimeISO: schedule.time.start,  // Keep for calculations
+      endTimeISO: schedule.time.end,      // Keep for calculations
       assignedEmployee: schedule.assignedEmployee ? {
         id: schedule.assignedEmployee._id,
         name: schedule.assignedEmployee.userId?.name || 'Unknown',
